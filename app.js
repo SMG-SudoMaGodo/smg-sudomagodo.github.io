@@ -154,6 +154,11 @@ async function icuSync(quiet) {
   const t = today(), from = E.addDays(t, -28);
   try {
     const well = await icu('/wellness?oldest=' + from + '&newest=' + t);
+    const has = w => ['hrv', 'restingHR', 'sleepScore', 'sleepSecs', 'readiness'].filter(k => w[k] != null && w[k] !== 0);
+    const withData = (well || []).filter(w => has(w).length);
+    const lastW = withData.map(w => w.id).sort().pop() || null;
+    const todayW = (well || []).find(w => w.id === t);
+    S.icu.diag = { days: withData.length, last: lastW, today: todayW ? has(todayW) : [], err: null };
     (well || []).forEach(w => {
       const d = w.id; if (!d) return;
       const c = S.checkins[d] || (S.checkins[d] = {}); c.src = c.src || {};
@@ -180,6 +185,7 @@ async function icuSync(quiet) {
     refreshToday(false);
     if (!quiet) toast('Dati aggiornati da Intervals.icu');
   } catch (e) {
+    S.icu.diag = Object.assign({}, S.icu.diag, { err: e.status ? 'errore ' + e.status : 'rete non raggiungibile' }); save();
     if (!quiet) toast(e.status === 401 || e.status === 403 ? 'Chiave API non valida' : 'Sincronizzazione non riuscita');
   }
   busy.sync = false; render();
@@ -321,10 +327,11 @@ function checkinHTML(d) {
   const f = (k, lab, unit, ph) => '<div class="field"><label>' + lab + '</label><div class="unit"><input inputmode="decimal" id="ci_' + k + '" value="' + (c[k] != null ? esc(c[k]) : '') + '" placeholder="' + ph + '"' +
     (src[k] === 'icu' ? ' style="border-color:rgba(196,255,69,.5)"' : '') + '><span>' + unit + '</span></div></div>';
   const fromIcu = Object.values(src).includes('icu');
+  const icuNote = icuOn() && !fromIcu && diagText() ? '<div class="src" style="color:var(--t2)">' + ico('link') + esc(diagText()) + '</div>' : '';
   const labels = ['A pezzi', 'Stanco', 'Normale', 'Bene', 'Al top'];
   return '<div class="card"><h3>Check-in del mattino<span class="sp"></span>' + (editCI ? '<button class="btn ghost sm" id="ciCancel" style="padding:0 4px">Chiudi</button>' : '') + '</h3>' +
     '<div class="feel">' + labels.map((l, i) => '<button data-feel="' + (i + 1) + '"' + (+c.feel === i + 1 ? ' class="on"' : '') + '>' + face(i + 1) + l + '</button>').join('') + '</div>' +
-    (fromIcu ? '<div class="src">' + ico('link') + 'Valori dal Fenix via Intervals.icu</div>' : '') +
+    (fromIcu ? '<div class="src">' + ico('link') + 'Valori dal Fenix via Intervals.icu</div>' : icuNote) +
     '<div class="grid2">' + f('hrv', 'HRV notturna', 'ms', 'es. 62') + f('rhr', 'FC a riposo', 'bpm', 'es. 46') +
     f('sleep', 'Punteggio sonno', '/100', 'es. 78') + f('garmin', 'Prontezza Garmin', '/100', 'facoltativo') + '</div>' +
     '<label class="check"><span class="switch"><input type="checkbox" id="ci_pain"' + (c.pain ? ' checked' : '') + '><i></i></span>Qualche dolore o acciacco oggi</label>' +
@@ -478,6 +485,15 @@ function renderDiario() {
 /* ------------------------------------------------------------------ */
 /* Vista: Profilo                                                      */
 /* ------------------------------------------------------------------ */
+const WNAME = { hrv: 'HRV', restingHR: 'FC a riposo', sleepScore: 'punteggio sonno', sleepSecs: 'ore di sonno', readiness: 'prontezza' };
+function diagText() {
+  const g = S.icu.diag; if (!g) return null;
+  if (g.err) return 'Ultimo tentativo non riuscito (' + g.err + ')';
+  if (!g.days) return 'Intervals.icu non ha dati di sonno o HRV negli ultimi 28 giorni: controlla che su Intervals sia attivo lo scaricamento dei dati di benessere da Garmin';
+  if (!g.today.length) return 'Dati di benessere ricevuti per ' + g.days + ' giorni, ma per oggi ancora niente (ultimo: ' + longDate(g.last) + ')';
+  return 'Oggi da Intervals: ' + g.today.map(k => WNAME[k]).join(', ');
+}
+function diagHTML() { const t = diagText(); return t ? '<div class="help" style="margin-top:8px">' + esc(t) + '</div>' : ''; }
 function renderProfilo() {
   const P = S.profile;
   const pace = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -509,7 +525,7 @@ function renderProfilo() {
 
   const st = S.icu.ok ? '<div class="status ok"><i></i>Collegato' + (S.icu.name ? ' · ' + esc(S.icu.name) : '') + '</div>' : S.icu.key ? '<div class="status err"><i></i>Non collegato</div>' : '<div class="status"><i></i>Non collegato</div>';
   h += '<div class="card"><h3>Intervals.icu → Garmin e MyWhoosh</h3>' + st +
-    (S.icu.ok ? '<div class="mut" style="font-size:12.5px;margin-top:4px">Ultima sincronizzazione: ' + (S.icu.last ? new Date(S.icu.last).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'mai') + '</div>' : '') +
+    (S.icu.ok ? '<div class="mut" style="font-size:12.5px;margin-top:4px">Ultima sincronizzazione: ' + (S.icu.last ? new Date(S.icu.last).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'mai') + '</div>' + diagHTML() : '') +
     (!S.icu.ok ? '<div class="help"><b>Come collegarlo</b><ol><li>Crea un account gratuito su intervals.icu</li><li>In Settings collega Garmin Connect: spunta il caricamento degli allenamenti pianificati e lo scaricamento dei dati di benessere</li><li>In MyWhoosh, nelle connessioni, collega Intervals.icu</li><li>In Settings → Developer Settings genera la chiave API e incollala qui sotto</li></ol></div>' : '') +
     '<div class="grid2" style="margin-top:10px"><div class="field"><label>ID atleta</label><input id="iAth" value="' + esc(S.icu.athlete) + '" placeholder="0"></div>' +
     '<div class="field"><label>Chiave API</label><input id="iKey" type="password" value="' + esc(S.icu.key) + '" placeholder="incolla qui" autocomplete="off"></div></div>' +
