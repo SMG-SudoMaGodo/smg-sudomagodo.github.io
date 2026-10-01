@@ -444,7 +444,7 @@ function bindOggi(p) {
   on('aReroll', () => setOpts((o, pp) => { o.forceTid = undefined; o.reroll = (o.reroll || 0) + 1; o.exclude = [...(o.exclude || []), pp.tid].slice(-4); }));
   on('aPush', () => icuPush(S.plans[d]));
   on('aIcuHow', () => openSheet('<h3 style="margin:0 0 8px;font-size:20px">Inviala a Fenix, Edge e MyWhoosh</h3><p class="t2">Collega Intervals.icu nel Profilo: da lì la seduta arriva da sola su Garmin Connect (e quindi su orologio e ciclocomputer) e nel calendario di MyWhoosh.</p><button class="btn hot full" id="goProf">Vai al Profilo</button>',
-    () => { document.getElementById('goProf').onclick = () => { closeSheet(); go('profilo'); }; }));
+    () => { document.getElementById('goProf').onclick = () => { closeSheet('profilo'); }; }));
   on('aDone', () => { const x = S.plans[d]; x.status = 'done'; x.via = 'manual'; save(); toast('Grande! Sudato e goduto 💪'); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
   on('aSkip', () => { const x = S.plans[d]; x.status = 'skipped'; if (x.pushed) { x.pushed = false; icuDelete(d); } save(); render(); });
   on('aUndo', () => { const x = S.plans[d]; x.status = 'planned'; delete x.via; save(); render(); });
@@ -624,17 +624,45 @@ function bindProfilo() {
     r.readAsText(f);
   };
   g('bReset').onclick = () => openSheet('<h3 style="margin:0 0 8px;font-size:20px">Azzerare tutto?</h3><p class="t2">Profilo, check-in e diario verranno cancellati da questo telefono.</p><div class="row"><button class="btn" id="rNo">Annulla</button><button class="btn hot" id="rYes">Azzera</button></div>', () => {
-    g('rNo').onclick = closeSheet; g('rYes').onclick = () => { localStorage.removeItem(KEY); S = fresh(); save(); closeSheet(); go('oggi'); };
+    g('rNo').onclick = () => closeSheet(); g('rYes').onclick = () => { localStorage.removeItem(KEY); S = fresh(); save(); closeSheet('oggi'); };
   });
 }
 
 /* ------------------------------------------------------------------ */
 /* Navigazione                                                         */
 /* ------------------------------------------------------------------ */
-function openSheet(html, bind) { $('#sheetBody').innerHTML = html; $('#sheet').classList.add('on'); if (bind) bind(); }
-function closeSheet() { $('#sheet').classList.remove('on'); }
+/* Navigazione con il tasto Indietro di Android:
+   Oggi è la base; Diario/Profilo e le schede aperte sono passi nella cronologia. */
+const sheetOpen = () => $('#sheet').classList.contains('on');
+function openSheet(html, bind) {
+  $('#sheetBody').innerHTML = html; $('#sheet').classList.add('on'); if (bind) bind();
+  history.pushState({ view, sheet: 1 }, '');
+}
+// thenGo: vista da aprire dopo la chiusura (si apre quando il passo "scheda" è stato tolto)
+let pendingGo = null;
+function closeSheet(thenGo) {
+  if (!sheetOpen()) { if (typeof thenGo === 'string') go(thenGo); return; }
+  $('#sheet').classList.remove('on');
+  if (history.state && history.state.sheet) { pendingGo = typeof thenGo === 'string' ? thenGo : null; history.back(); }
+  else if (typeof thenGo === 'string') go(thenGo);
+}
 $('#sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
-function go(v) { view = v; if (v === 'diario') weekOff = 0; document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); render(); window.scrollTo(0, 0); }
+function show(v) { view = v; document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); render(); window.scrollTo(0, 0); }
+function go(v) {
+  if (v === 'diario') weekOff = 0;
+  if (v === view) { show(v); return; }
+  if (v === 'oggi') { if (history.state && history.state.view && history.state.view !== 'oggi') { history.back(); return; } history.replaceState({ view: 'oggi' }, ''); }
+  else if (view === 'oggi') history.pushState({ view: v }, '');
+  else history.replaceState({ view: v }, '');
+  show(v);
+}
+window.addEventListener('popstate', e => {
+  const st = e.state || { view: 'oggi' };
+  if (sheetOpen() && !st.sheet) $('#sheet').classList.remove('on');
+  if ((st.view || 'oggi') !== view) show(st.view || 'oggi');
+  if (pendingGo) { const v = pendingGo; pendingGo = null; go(v); }
+});
+history.replaceState({ view: 'oggi' }, '');
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
 
 function render() {
