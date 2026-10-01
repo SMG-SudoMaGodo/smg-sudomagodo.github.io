@@ -138,7 +138,7 @@ const T = [
     } },
 
   /* ---------- 2 · fondo ---------- */
-  { id: 'end_steady', name: 'Fondo regolare', level: 2, sports: [...BIKE, 'run'], dur: [35, 150], runStage: 2,
+  { id: 'end_steady', name: 'Fondo regolare', level: 2, sports: [...BIKE, 'run'], dur: [30, 150], runStage: 2,
     desc: 'Il pane quotidiano della resistenza: ritmo costante, respiro controllato, puoi parlare a frasi intere.',
     build(D, s) {
       const wu = warmup(s, 10); const cdM = s === 'run' ? 5 : 8;
@@ -215,7 +215,7 @@ const T = [
     } },
 
   /* ---------- 4 · duro ---------- */
-  { id: 'threshold', name: 'Soglia classica', level: 4, sports: ['indoor', 'road', 'run'], dur: [50, 110], runStage: 3,
+  { id: 'threshold', name: 'Soglia classica', level: 4, sports: ['indoor', 'road', 'run'], dur: [60, 110], runStage: 3,
     desc: 'Ripetute alla soglia: il cuore dell\'allenamento per andare più forte a lungo. Ritmo costante dal primo all\'ultimo minuto.',
     build(D, s) {
       let L, R, n;
@@ -234,13 +234,13 @@ const T = [
       }
       return assemble(D, s, warmup(s, 15, true), main, 8);
     } },
-  { id: 'thr_climbs', name: 'Scalate a soglia', level: 4, sports: ['mtb', 'road'], dur: [50, 120],
+  { id: 'thr_climbs', name: 'Scalate a soglia', level: 4, sports: ['mtb', 'road'], dur: [60, 120],
     desc: 'Scegli una salita di 5-8 minuti e ripetila a soglia, recuperando in discesa. Ritmo regolare: la prima non deve essere la più veloce.',
     build(D, s) {
       const n = clamp(Math.floor((D - 28) / 12), 3, 6);
       return assemble(D, s, warmup(s, 15, true), [sec('Scalate', [st('Z4', 6, 'Salita a soglia', [70, 85]), st('Z1', 6, 'Discesa e recupero')], n)], 8);
     } },
-  { id: 'sprints', name: 'Sprint & agilità', level: 4, sports: BIKE, dur: [45, 100],
+  { id: 'sprints', name: 'Sprint & agilità', level: 4, sports: BIKE, dur: [70, 100],
     desc: 'Sprint brevissimi e a tutta con recuperi lunghi: esplosività e brillantezza. Qualità, non quantità.',
     build(D, s) {
       const main = [
@@ -288,7 +288,7 @@ const T = [
       }
       return assemble(D, s, warmup(s, 15, true), main, 8);
     } },
-  { id: 'hill_hunt', name: 'Caccia alle salite', level: 5, sports: ['mtb', 'road', 'run'], dur: [45, 120], runStage: 3,
+  { id: 'hill_hunt', name: 'Caccia alle salite', level: 5, sports: ['mtb', 'road', 'run'], dur: [55, 120], runStage: 3,
     desc: 'Ogni strappo breve (1-3 minuti) si fa a tutta, poi recuperi in pianura e in discesa finché il fiato torna normale. Usa il tasto Lap.',
     challengeKey: 'hunt',
     build(D, s) {
@@ -617,6 +617,7 @@ function propose(state, date, opts) {
     let pool = T.filter(t => t.level === lv && templateOk(t, sp, P, dayLong) && !(opts.exclude || []).includes(t.id));
     if (!pool.length) pool = T.filter(t => t.level === lv && templateOk(t, sp, P, dayLong));
     if (!pool.length) continue;
+    if (opts.forceDur) { const fit = pool.filter(t => t.dur[0] <= opts.forceDur); if (fit.length) pool = fit; else if (lv > 1) continue; }
     if (!(testDue && lv === 5)) pool = pool.filter(t => !t.test).length ? pool.filter(t => !t.test) : pool;
     const weights = pool.map(t => {
       let x = 1; const last = ctx.lastUse[t.id];
