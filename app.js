@@ -296,7 +296,9 @@ function workoutHTML(p, ro) {
         sports.map(s => '<button class="chip' + (fs === s ? ' on' : '') + '" data-sport="' + s + '">' + E.SPORTS[s].name + '</button>').join('') + '</div>' +
         '<div class="lab">Tempo a disposizione</div><div class="chips"><button class="chip' + (!fd ? ' on' : '') + '" data-dur="">Automatico</button>' +
         [30, 45, 60, 75, 90, 105, 120, 150].filter(m => m <= maxD).map(m => '<button class="chip' + (fd === m ? ' on' : '') + '" data-dur="' + m + '">' + fmtMin(m) + '</button>').join('') + '</div></div>';
+      const iv = p.sport !== 'indoor' && p.sport !== 'run' && S.profile.sports.indoor ? E.indoorVersion(p) : null;
       h += '<div class="actions">' +
+        (iv ? '<button class="btn lime wide" id="aIndoor">' + ico('indoor') + 'Falla sui rulli</button>' : '') +
         '<button class="btn" id="aReroll">' + ico('dice') + 'Rilancia</button>' +
         (icuOn() ? '<button class="btn" id="aPush">' + (busy.push ? ico('sync', 'spin') : ico(p.pushed ? 'check' : 'send')) + (p.pushed ? 'Inviata' : 'Invia') + '</button>'
                  : '<button class="btn" id="aIcuHow">' + ico('link') + 'Invia…</button>') +
@@ -408,9 +410,15 @@ function bindOggi(p) {
   });
   on('ciEdit', () => { editCI = true; render(); });
   on('ciCancel', () => { editCI = false; render(); });
-  document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts(o => { o.forceSport = b.dataset.sport || undefined; o.reroll = 0; o.exclude = []; }));
+  document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts(o => { o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.reroll = 0; o.exclude = []; }));
   document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => setOpts(o => { o.forceDur = b.dataset.dur ? +b.dataset.dur : undefined; }));
-  on('aReroll', () => setOpts((o, pp) => { o.reroll = (o.reroll || 0) + 1; o.exclude = [...(o.exclude || []), pp.tid].slice(-4); }));
+  on('aIndoor', () => {
+    const pp = S.plans[d]; const iv = E.indoorVersion(pp); if (!iv) return;
+    const from = E.TEMPLATES[pp.tid].name;
+    setOpts(o => { o.forceSport = 'indoor'; o.forceTid = iv.tid; o.forceDur = iv.dur; o.exclude = []; });
+    toast(iv.same ? from + ': versione rulli pronta' : from + ' → ' + iv.name + ' sui rulli');
+  });
+  on('aReroll', () => setOpts((o, pp) => { o.forceTid = undefined; o.reroll = (o.reroll || 0) + 1; o.exclude = [...(o.exclude || []), pp.tid].slice(-4); }));
   on('aPush', () => icuPush(S.plans[d]));
   on('aIcuHow', () => openSheet('<h3 style="margin:0 0 8px;font-size:20px">Inviala a Fenix, Edge e MyWhoosh</h3><p class="t2">Collega Intervals.icu nel Profilo: da lì la seduta arriva da sola su Garmin Connect (e quindi su orologio e ciclocomputer) e nel calendario di MyWhoosh.</p><button class="btn hot full" id="goProf">Vai al Profilo</button>',
     () => { document.getElementById('goProf').onclick = () => { closeSheet(); go('profilo'); }; }));

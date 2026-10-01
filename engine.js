@@ -606,6 +606,10 @@ function propose(state, date, opts) {
 
   // prova a trovare la combinazione sport + seduta, scendendo di livello se serve
   let tpl = null;
+  // seduta scelta esplicitamente (es. la stessa seduta portata sui rulli)
+  if (opts.forceTid && TEMPLATES[opts.forceTid] && sport && TEMPLATES[opts.forceTid].sports.includes(sport)) {
+    tpl = TEMPLATES[opts.forceTid]; level = tpl.level;
+  }
   for (let lv = level; lv >= 1 && !tpl; lv--) {
     const sportsTry = sport ? [sport] : cand.filter(s => T.some(t => t.level === lv && templateOk(t, s, P, dayLong)));
     if (!sportsTry.length) continue;
@@ -629,6 +633,7 @@ function propose(state, date, opts) {
   let [lo, hi] = durRange(tpl, sport, dayLong, dayMax, light, level, P);
   let dur = round5(between(r, lo, hi));
   if (deload) dur = round5(Math.max(tpl.dur[0], dur * 0.75));
+  if (opts.forceTid && tpl.id === opts.forceTid) reasons.push('Versione rulli della seduta di oggi');
   if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.max(opts.forceDur, 30) : opts.forceDur));
 
   /* --- motivi e sfida --- */
@@ -650,6 +655,19 @@ function propose(state, date, opts) {
   if (P.sports.strength && level <= 2 && !dayLong) extra = EXTRAS[Math.floor(r() * EXTRAS.length)].id;
 
   return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload };
+}
+
+/* ------------------------------------------------------------------ */
+/* Versione rulli di una seduta all'aperto                             */
+/* ------------------------------------------------------------------ */
+const INDOOR_EQ = { explorer: 'end_steady', hilly_long: 'end_steady', free_ride: 'end_cad', tempo_climbs: 'tempo_blocks',
+  fartlek: 'tempo_blocks', thr_climbs: 'threshold', hill_hunt: 'vo2_3' };
+function indoorVersion(plan) {
+  const t = TEMPLATES[plan.tid];
+  const tid = t.sports.includes('indoor') ? t.id : INDOOR_EQ[t.id] || null;
+  if (!tid) return null;
+  const tpl = TEMPLATES[tid];
+  return { tid, same: tid === t.id, name: tpl.name, dur: Math.max(tpl.dur[0], Math.min(plan.dur, 120)) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -770,7 +788,7 @@ function activityLevel(a) {
 root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
-  defaultProfile, readiness, propose, build, stats, profileBars, targetText,
+  defaultProfile, readiness, propose, indoorVersion, build, stats, profileBars, targetText,
   toIcu, icuEvent, activitySport, activityLevel, isDeload, context
 };
 })(typeof window !== 'undefined' ? window : globalThis);
