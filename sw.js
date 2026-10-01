@@ -1,5 +1,5 @@
 // SMG — service worker (funzionamento offline)
-const CACHE = 'smg-org-v6';
+const CACHE = 'smg-org-v7';
 const FILES = ['./', './index.html', './engine.js', './app.js', './app.webmanifest', './icon-192-v2.png', './icon-512-v2.png',
   './icon-maskable-512-v2.png', './apple-touch-icon-v2.png', './logo-v2.png',
   './fonts/poppins-regular.woff', './fonts/poppins-medium.woff', './fonts/poppins-bold.woff', './fonts/poppins-bolditalic.woff'];

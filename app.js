@@ -341,11 +341,69 @@ function checkinHTML(d) {
     '<button class="btn hot full" id="ciGo">Calcola il semaforo</button></div>';
 }
 
+const LCOL = { green: '#3BE889', yellow: '#FFA62B', red: '#FF4F5E' };
+function trafficSVG(light) {
+  const lamp = (cy, k) => {
+    const on = k === light, c = LCOL[k];
+    return '<circle cx="23" cy="' + cy + '" r="13" fill="' + c + '" opacity="' + (on ? 1 : .14) + '"' + (on ? ' style="filter:drop-shadow(0 0 7px ' + c + ')"' : '') + '/>' +
+      (on ? '<circle cx="19" cy="' + (cy - 4) + '" r="3.5" fill="#fff" opacity=".45"/>' : '');
+  };
+  return '<svg class="tl" viewBox="0 0 46 112" role="img" aria-label="Semaforo ' + ({ green: 'verde', yellow: 'arancione', red: 'rosso' })[light] + '">' +
+    '<rect x="2" y="2" width="42" height="108" rx="15" fill="#070C15" stroke="#22334D" stroke-width="2"/>' +
+    lamp(23, 'red') + lamp(56, 'yellow') + lamp(89, 'green') + '</svg>';
+}
+// ultimi valori (14 giorni) per media personale e mini grafico
+function series(key, d, n) { const out = []; for (let i = n - 1; i >= 0; i--) { const c = S.checkins[E.addDays(d, -i)]; out.push(c && c[key] != null && c[key] !== '' ? +c[key] : null); } return out; }
+function avgPrev(key, d) { const v = series(key, E.addDays(d, -1), 14).filter(x => x != null); return v.length >= 3 ? v.reduce((a, b) => a + b, 0) / v.length : null; }
+function spark(vals, color) {
+  const pts = vals.map((v, i) => [i, v]).filter(p => p[1] != null); if (pts.length < 2) return '';
+  const ys = pts.map(p => p[1]), lo = Math.min(...ys), hi = Math.max(...ys), span = hi - lo || 1, n = vals.length - 1;
+  const xy = pts.map(([i, v]) => [(i / n * 56 + 1).toFixed(1), (20 - (v - lo) / span * 17).toFixed(1)]);
+  const last = xy[xy.length - 1];
+  return '<svg class="spark" viewBox="0 0 58 22"><polyline points="' + xy.map(p => p.join(',')).join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/><circle cx="' + last[0] + '" cy="' + last[1] + '" r="2.4" fill="' + color + '"/></svg>';
+}
+const IC = {
+  hrv: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
+  rhr: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+  sleep: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  form: '<path d="M4 18 9 12l4 3 7-9"/>',
+  garmin: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'
+};
+function metric(key, label, unit, d, better, fmt) {
+  const c = S.checkins[d] || {}; const v = c[key]; if (v == null || v === '') return '';
+  const a = avgPrev(key, d); let dl = '<span class="d">media in arrivo</span>';
+  if (a != null) {
+    const diff = v - a, rel = Math.abs(diff) < (key === 'rhr' ? 2 : a * 0.03);
+    const good = better === 'up' ? diff > 0 : diff < 0;
+    dl = rel ? '<span class="d">in media</span>' : '<span class="d ' + (good ? 'up' : 'down') + '">' + (diff > 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(diff)) + ' vs media</span>';
+  }
+  return '<div class="m"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC[key === 'sleepH' ? 'sleep' : key] + '</svg>' + label + '</div>' +
+    '<div class="val num">' + (fmt ? fmt(v) : Math.round(v)) + '<small>' + unit + '</small></div><div class="row2">' + dl + spark(series(key, d, 7), 'var(--hot)') + '</div></div>';
+}
+function healthHTML(d) {
+  const c = S.checkins[d] || {};
+  const tiles = [
+    metric('hrv', 'HRV notturna', 'ms', d, 'up'),
+    metric('rhr', 'FC a riposo', 'bpm', d, 'down'),
+    c.sleep != null && c.sleep !== '' ? metric('sleep', 'Sonno', '/100', d, 'up') : metric('sleepH', 'Sonno', 'ore', d, 'up', v => (Math.round(v * 10) / 10).toString().replace('.', ',')),
+    c.garmin != null && c.garmin !== '' ? metric('garmin', 'Prontezza Garmin', '/100', d, 'up') : ''
+  ];
+  if (c.tsb != null && c.tsb !== '') {
+    const t = +c.tsb; const txt = t < -25 ? 'Molto affaticato' : t < -10 ? 'Carico, in costruzione' : t <= 5 ? 'Equilibrio' : 'Fresco';
+    tiles.push('<div class="m"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC.form + '</svg>Forma</div><div class="val num">' + (t > 0 ? '+' : '') + t + '</div><div class="row2"><span class="d">' + txt + '</span>' + spark(series('tsb', d, 7), 'var(--hot)') + '</div></div>');
+  }
+  const html = tiles.filter(Boolean);
+  return html.length ? '<div class="hm">' + html.join('') + '</div>' : '';
+}
 function lightHTML(rd) {
   const msg = { green: ['Via libera', 'Gambe pronte: oggi si può spingere.'], yellow: ['Con giudizio', 'Si lavora, ma senza esagerare.'], red: ['Recupero', 'Oggi il corpo chiede di rallentare.'] }[rd.light];
-  return '<div class="card"><div class="light"><div class="orb ' + rd.light + '"><span class="num">' + rd.score + '</span></div><div style="flex:1"><h2>' + msg[0] + '</h2><p>' + msg[1] + '</p></div>' +
-    '<button class="btn sm" id="ciEdit">Modifica</button></div>' +
-    (rd.why.length ? '<div class="why">' + rd.why.map(w => '<span class="pill">' + esc(w) + '</span>').join('') + '</div>' : '') + '</div>';
+  const hm = healthHTML(today());
+  // i motivi già visibili nei riquadri non si ripetono
+  const why = hm ? rd.why.filter(w => !/HRV|FC a riposo|sonno|dormito/i.test(w)) : rd.why;
+  return '<div class="card"><div class="light">' + trafficSVG(rd.light) +
+    '<div style="flex:1;min-width:0"><div class="score num" style="color:' + LCOL[rd.light] + '">' + rd.score + '<small>/100</small></div><h2>' + msg[0] + '</h2><p>' + msg[1] + '</p></div>' +
+    '<button class="btn sm edit" id="ciEdit">Modifica</button></div>' + hm +
+    (why.length ? '<div class="why">' + why.map(w => '<span class="pill">' + esc(w) + '</span>').join('') + '</div>' : '') + '</div>';
 }
 
 function restHTML(p) {

@@ -545,7 +545,7 @@ function propose(state, date, opts) {
   const deload = isDeload(P, date);
   const reasons = [];
 
-  if (rd) reasons.push(light === 'green' ? 'Semaforo verde: via libera' : light === 'yellow' ? 'Semaforo giallo: oggi si va di qualità leggera' : 'Semaforo rosso: oggi solo recupero');
+  if (rd) reasons.push(light === 'green' ? 'Semaforo verde: via libera' : light === 'yellow' ? 'Semaforo arancione: oggi si va di qualità leggera' : 'Semaforo rosso: oggi solo recupero');
   else reasons.push('Proposta provvisoria: fai il check-in per confermarla');
 
   if (light === 'red' && rd && rd.score < 35 && !opts.forceSport && !opts.extra) {
