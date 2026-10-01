@@ -74,7 +74,7 @@ function wxIcon(code) {
 const SC = { indoor: 'var(--indoor)', mtb: 'var(--mtb)', road: 'var(--road)', run: 'var(--run)', strength: 'var(--strength)' };
 const ZC = { WALK: '#4A5368', Z1: '#5E6A82', Z2: '#3FD4FF', Z3: '#C4FF45', SS: '#E6EE3A', Z4: '#FFC940', O4: '#FFA41C', Z5: '#FF6A3D', Z6: '#FF3D6E', Z7: '#D24BFF', TEST: '#FF3D3D', MIX: '#8FA0B8' };
 const LC = { green: 'var(--green)', yellow: 'var(--yellow)', red: 'var(--red)' };
-const SH = { indoor: '#A393FF', mtb: '#C4FF45', road: '#3FD4FF', run: '#FF6FA0', strength: '#FFC940' };
+const SH = { indoor: '#A994FF', mtb: '#B8F04A', road: '#FFB547', run: '#FF7BA9', strength: '#3FE0C5' };
 const sportIcon = s => '<div class="sporticon" style="background:' + SH[s] + '24;color:' + SH[s] + '">' + ico(s) + '</div>';
 
 /* ------------------------------------------------------------------ */
@@ -96,19 +96,20 @@ async function fetchWeather(force) {
   if (!S.loc) return false;
   if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()]) return false;
   const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon +
-    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max&timezone=auto&forecast_days=3';
+    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max&hourly=precipitation_probability&timezone=auto&forecast_days=3';
   try {
     const r = await fetch(u); if (!r.ok) throw 0; const j = await r.json(); const days = {};
     j.daily.time.forEach((d, i) => days[d] = { code: j.daily.weather_code[i], tmax: j.daily.temperature_2m_max[i], tmin: j.daily.temperature_2m_min[i],
       rain: j.daily.precipitation_probability_max[i] || 0, mm: j.daily.precipitation_sum[i] || 0, wind: j.daily.wind_speed_10m_max[i] || 0 });
+    // finestra di 3 ore più asciutta tra le 7 e le 19
+    if (j.hourly && j.hourly.time) Object.keys(days).forEach(d => {
+      const pr = []; j.hourly.time.forEach((h, i) => { if (h.slice(0, 10) === d) pr[+h.slice(11, 13)] = j.hourly.precipitation_probability[i] || 0; });
+      let best = null;
+      for (let h = 7; h <= 16; h++) { const v = Math.max(pr[h] || 0, pr[h + 1] || 0, pr[h + 2] || 0); if (best == null || v < best.v) best = { h, v }; }
+      if (best) days[d].win = best;
+    });
     S.wx = { at: Date.now(), days }; save(); return true;
   } catch (e) { return false; }
-}
-function renderWx() {
-  const w = wxFor(today()); const b = $('#wx');
-  if (!S.loc) { b.innerHTML = ico('pin') + '<span class="mut">Meteo</span>'; return; }
-  if (!w) { b.innerHTML = ico('pin') + '<span class="mut">' + esc(S.loc.name || '…') + '</span>'; return; }
-  b.innerHTML = wxIcon(w.code) + '<span>' + Math.round(w.tmax) + '°</span><span class="mut">' + (w.rain >= 20 ? w.rain + '%' : Math.round(w.tmin) + '°') + '</span>';
 }
 function locate() {
   if (!navigator.geolocation) { toast('Posizione non disponibile'); return; }
@@ -255,7 +256,7 @@ function chartSVG(sections) {
   });
   return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:84px">' + out + '</svg>';
 }
-function dots(level) { let s = '<div class="dots">'; for (let i = 1; i <= 5; i++) s += '<i' + (i <= level ? ' style="background:' + (level >= 4 ? 'var(--hot)' : level === 3 ? 'var(--hot2)' : 'var(--lime)') + '"' : '') + '></i>'; return s + '</div>'; }
+function dots(level) { let s = '<div class="dots">'; for (let i = 1; i <= 5; i++) s += '<i' + (i <= level ? ' style="background:' + (level >= 4 ? 'var(--hard)' : level === 3 ? 'var(--yellow)' : 'var(--lime)') + '"' : '') + '></i>'; return s + '</div>'; }
 
 function stepsHTML(sections, sport) {
   const P = S.profile; let h = '';
@@ -298,7 +299,7 @@ function workoutHTML(p, ro) {
         [30, 45, 60, 75, 90, 105, 120, 150].filter(m => m <= maxD).map(m => '<button class="chip' + (fd === m ? ' on' : '') + '" data-dur="' + m + '">' + fmtMin(m) + '</button>').join('') + '</div></div>';
       const iv = p.sport !== 'indoor' && p.sport !== 'run' && S.profile.sports.indoor ? E.indoorVersion(p) : null;
       h += '<div class="actions">' +
-        (iv ? '<button class="btn lime wide" id="aIndoor">' + ico('indoor') + 'Falla sui rulli</button>' : '') +
+        (iv ? '<button class="btn wide" id="aIndoor"><span style="color:var(--indoor);display:flex">' + ico('indoor') + '</span>' + 'Falla sui rulli</button>' : '') +
         '<button class="btn" id="aReroll">' + ico('dice') + 'Rilancia</button>' +
         (icuOn() ? '<button class="btn" id="aPush">' + (busy.push ? ico('sync', 'spin') : ico(p.pushed ? 'check' : 'send')) + (p.pushed ? 'Inviata' : 'Invia') + '</button>'
                  : '<button class="btn" id="aIcuHow">' + ico('link') + 'Invia…</button>') +
@@ -354,14 +355,35 @@ function restHTML(p) {
     '<button class="btn" id="aExtraDay">' + (red ? 'Solo un giro leggerissimo' : 'Voglio muovermi lo stesso') + '</button></div>';
 }
 
-function tomorrowHTML(d) {
-  const t = E.addDays(d, 1); const cfg = S.profile.days[E.dow(t)] || {}; const w = wxFor(t);
-  const txt = !cfg.on ? 'Domani riposo' : cfg.long ? 'Domani giorno lungo, fino a ' + fmtMin(cfg.max) : 'Domani allenamento, fino a ' + fmtMin(cfg.max);
-  return '<div class="card tomorrow">' + ico('moon') + '<div style="flex:1">' + txt + '</div>' + (w ? '<div class="wx" style="border:0;padding:0;background:none">' + wxIcon(w.code) + Math.round(w.tmax) + '°' + (w.rain >= 30 ? ' <span class="mut">' + w.rain + '%</span>' : '') + '</div>' : '') + '</div>';
+const WXD = c => c <= 1 ? 'Sereno' : c === 2 ? 'Poco nuvoloso' : c === 3 ? 'Nuvoloso' : c <= 48 ? 'Nebbia' : c <= 57 ? 'Pioviggine' : c <= 67 ? 'Pioggia' : c <= 77 ? 'Neve' : c <= 82 ? 'Rovesci' : c <= 86 ? 'Neve' : 'Temporale';
+const drop = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>';
+const wind = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/></svg>';
+function wxDayHTML(d, label, cls) {
+  const w = wxFor(d);
+  if (!w) return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="desc" style="margin-top:10px">Previsioni non disponibili</div></div>';
+  return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="main">' + wxIcon(w.code) +
+    '<div><div class="tmax num">' + Math.round(w.tmax) + '°</div><div class="tmin num">' + Math.round(w.tmin) + '°</div></div></div>' +
+    '<div class="desc">' + WXD(w.code) + '</div><div class="meta"><span style="color:' + (w.rain >= 50 ? 'var(--hot2)' : 'inherit') + '">' + drop + w.rain + '%' + (w.mm >= 0.5 ? ' · ' + Math.round(w.mm) + ' mm' : '') + '</span>' +
+    '<span>' + wind + Math.round(w.wind) + ' km/h</span></div></div>';
+}
+function weatherHTML(d) {
+  const t = E.addDays(d, 1); const cfg = S.profile.days[E.dow(t)] || {};
+  if (!S.loc) return '<div class="card wxc"><div class="empty">' + ico('pin') + '<div style="flex:1">Imposta la località per vedere il meteo di oggi e domani</div><button class="btn sm" id="wxSet">Imposta</button></div></div>';
+  const w = wxFor(t);
+  let plan = !cfg.on ? '<b>Domani riposo.</b>' : '<b>Domani ' + (cfg.long ? 'giorno lungo' : 'allenamento') + ', fino a ' + fmtMin(cfg.max) + '.</b>';
+  if (cfg.on && w) {
+    const bad = w.rain >= 60 || w.mm >= 3, meh = !bad && (w.rain >= 40 || w.tmax < 4);
+    if (bad) plan += w.win && w.win.v <= 30 ? ' Pioggia probabile, ma tra le ' + w.win.h + ' e le ' + (w.win.h + 3) + ' dovrebbe reggere: altrimenti rulli.' : ' Pioggia probabile: prepara i rulli.';
+    else if (meh) plan += ' Tempo incerto' + (w.win && w.win.v < w.rain ? ': meglio uscire tra le ' + w.win.h + ' e le ' + (w.win.h + 3) + '.' : ', tieni pronti i rulli.');
+    else if (w.wind >= 35) plan += ' Asciutto ma ventoso: meglio la MTB nel bosco.';
+    else plan += ' Si preannuncia una bella giornata per uscire.';
+  }
+  return '<div class="card wxc"><div class="days">' + wxDayHTML(d, 'Oggi', '') + wxDayHTML(t, 'Domani, ' + GG[E.parse(t).getDay()], 'tmw') + '</div>' +
+    '<div class="plan">' + ico('cal') + '<div>' + plan + '</div></div></div>';
 }
 
 function welcomeHTML() {
-  return '<div class="card" style="background:linear-gradient(135deg,rgba(255,78,46,.18),rgba(255,164,28,.08));border-color:rgba(255,164,28,.35)">' +
+  return '<div class="card" style="background:linear-gradient(135deg,rgba(45,180,242,.2),rgba(45,180,242,.05));border-color:rgba(45,180,242,.4)">' +
     '<h3>Benvenuto in SMG<span class="sp"></span><button class="btn ghost sm" id="wClose" style="padding:0 4px">' + ico('x') + '</button></h3>' +
     '<div class="t2" style="font-size:14px">Ogni mattina: <b style="color:var(--text)">check-in</b> di 10 secondi → <b style="color:var(--text)">semaforo</b> → seduta del giorno, sempre diversa. ' +
     'Non ti piace? Tocca <b style="color:var(--text)">Rilancia</b>. Nel Profilo collega Intervals.icu per mandarla su Fenix, Edge e MyWhoosh, e imposta la località per il meteo.</div></div>';
@@ -376,12 +398,12 @@ function renderOggi() {
   const title = p.rest ? 'Oggi si <em>ricarica</em>.' : p.status === 'planned' && p.light === 'red' ? 'Oggi si <em>recupera</em>.' : p.status === 'done' ? 'Sudato. <em>Goduto.</em>' : p.level >= 4 ? 'Oggi si <em>suda</em>.' : p.level === 3 ? 'Oggi si <em>spinge</em> il giusto.' : 'Oggi si <em>gode</em>.';
   let h = '<div class="hello"><div class="d">' + longDate(d) + '</div><h1>' + title + '</h1></div>';
   if (S.welcome) h += welcomeHTML();
+  h += weatherHTML(d);
   if (!p.rest || !p.redRest) h += (rd && !editCI) ? lightHTML(rd) : checkinHTML(d);
   else h += lightHTML(rd);
   h += p.rest ? restHTML(p) : workoutHTML(p);
   const exId = p.rest ? E.EXTRAS[E.hash(d) % E.EXTRAS.length].id : p.extra;
   if (S.profile.sports.strength && exId && (p.rest || p.level <= 2)) h += extraHTML(exId, d);
-  h += tomorrowHTML(d);
   $('#v-oggi').innerHTML = h;
   bindOggi(p);
 }
@@ -390,6 +412,7 @@ function bindOggi(p) {
   const d = today();
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on('wClose', () => { S.welcome = false; save(); render(); });
+  on('wxSet', () => go('profilo'));
   document.querySelectorAll('[data-feel]').forEach(b => b.onclick = () => {
     document.querySelectorAll('[data-feel]').forEach(x => x.classList.toggle('on', x === b));
   });
@@ -484,7 +507,7 @@ function renderDiario() {
     if (!p || p.rest) return;
     let extra = '';
     if (d < t) extra = '<div class="row" style="margin-top:4px"><button class="btn" data-set="done">' + ico('check') + 'Fatta</button><button class="btn" data-set="skipped">' + ico('x') + 'Saltata</button></div>';
-    openSheet('<div class="d mut" style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;margin:0 2px 10px">' + longDate(d) + '</div>' + workoutHTML(p, true) + extra, () => {
+    openSheet('<div class="d mut" style="font-size:14px;font-weight:600;margin:0 2px 10px">' + longDate(d) + '</div>' + workoutHTML(p, true) + extra, () => {
       document.querySelectorAll('[data-set]').forEach(x => x.onclick = () => { p.status = x.dataset.set; save(); closeSheet(); render(); });
     });
   });
@@ -613,11 +636,9 @@ function closeSheet() { $('#sheet').classList.remove('on'); }
 $('#sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
 function go(v) { view = v; if (v === 'diario') weekOff = 0; document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); render(); window.scrollTo(0, 0); }
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
-$('#wx').onclick = () => { if (!S.loc) locate(); else go('profilo'); };
 
 function render() {
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
-  renderWx();
   if (view === 'oggi') renderOggi(); else if (view === 'diario') renderDiario(); else renderProfilo();
 }
 
