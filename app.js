@@ -410,12 +410,20 @@ function trafficSVG(light) {
 // ultimi valori (14 giorni) per media personale e mini grafico
 function series(key, d, n) { const out = []; for (let i = n - 1; i >= 0; i--) { const c = S.checkins[E.addDays(d, -i)]; out.push(c && c[key] != null && c[key] !== '' ? +c[key] : null); } return out; }
 function avgPrev(key, d) { const v = series(key, E.addDays(d, -1), 14).filter(x => x != null); return v.length >= 3 ? v.reduce((a, b) => a + b, 0) / v.length : null; }
-function spark(vals, color) {
+// andamento 7 giorni a tutta larghezza dentro il riquadro; ref = linea tratteggiata della tua media/norma
+function spark(vals, color, ref, refLab) {
   const pts = vals.map((v, i) => [i, v]).filter(p => p[1] != null); if (pts.length < 2) return '';
-  const ys = pts.map(p => p[1]), lo = Math.min(...ys), hi = Math.max(...ys), span = hi - lo || 1, n = vals.length - 1;
-  const xy = pts.map(([i, v]) => [(i / n * 56 + 1).toFixed(1), (20 - (v - lo) / span * 17).toFixed(1)]);
-  const last = xy[xy.length - 1];
-  return '<svg class="spark" viewBox="0 0 58 22"><polyline points="' + xy.map(p => p.join(',')).join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/><circle cx="' + last[0] + '" cy="' + last[1] + '" r="2.4" fill="' + color + '"/></svg>';
+  const ys = pts.map(p => p[1]).concat(ref != null ? [ref] : []);
+  const lo = Math.min(...ys), hi = Math.max(...ys), span = hi - lo || 1, n = vals.length - 1;
+  const X = i => (i / n * 96 + 2).toFixed(1), Y = v => (24 - (v - lo) / span * 20).toFixed(1);
+  const line = pts.map(([i, v], k) => (k ? 'L' : 'M') + X(i) + ' ' + Y(v)).join(' ');
+  const last = pts[pts.length - 1];
+  const ns = ' vector-effect="non-scaling-stroke"';
+  return '<svg class="spark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">' +
+    (ref != null ? '<line x1="2" x2="98" y1="' + Y(ref) + '" y2="' + Y(ref) + '" stroke="#7C8DA6" stroke-width="1" stroke-dasharray="3 3"' + ns + '/>' : '') +
+    '<path d="' + line + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"' + ns + '/>' +
+    '<path d="M' + X(last[0]) + ' ' + Y(last[1]) + 'h0" stroke="' + color + '" stroke-width="6" stroke-linecap="round"' + ns + '/></svg>' +
+    '<div class="sx"><span>7 gg fa</span>' + (ref != null ? '<span class="rl">' + (refLab || 'media') + '</span>' : '') + '<span>oggi</span></div>';
 }
 const IC = {
   hrv: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
@@ -439,7 +447,8 @@ function metric(key, label, unit, d, better, fmt) {
     dl = rel ? '<span class="d">in media</span>' : '<span class="d ' + (good ? 'up' : 'down') + '">' + (diff > 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(diff)) + ' vs media</span>';
   }
   return '<div class="m"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC[key === 'sleepH' ? 'sleep' : key] + '</svg>' + label + '</div>' +
-    '<div class="val num">' + (fmt ? fmt(v) : Math.round(v)) + '<small>' + unit + '</small></div><div class="row2">' + dl + spark(series(key, d, 7), 'var(--hot)') + '</div></div>';
+    '<div class="val num">' + (fmt ? fmt(v) : Math.round(v)) + '<small>' + unit + '</small></div>' + dl +
+    spark(series(key, d, 7), 'var(--hot)', hs ? hs.mean : a, hs ? 'norma' : 'media') + '</div>';
 }
 function healthHTML(d) {
   const c = S.checkins[d] || {};
@@ -451,7 +460,7 @@ function healthHTML(d) {
   ];
   if (c.tsb != null && c.tsb !== '') {
     const t = +c.tsb; const txt = t < -25 ? 'Molto affaticato' : t < -10 ? 'Carico, in costruzione' : t <= 5 ? 'Equilibrio' : 'Fresco';
-    tiles.push('<div class="m"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC.form + '</svg>Forma</div><div class="val num">' + (t > 0 ? '+' : '') + t + '</div><div class="row2"><span class="d">' + txt + '</span>' + spark(series('tsb', d, 7), 'var(--hot)') + '</div></div>');
+    tiles.push('<div class="m"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC.form + '</svg>Forma</div><div class="val num">' + (t > 0 ? '+' : '') + t + '</div><span class="d">' + txt + '</span>' + spark(series('tsb', d, 7), 'var(--hot)', 0, 'zero') + '</div>');
   }
   const html = tiles.filter(Boolean);
   return html.length ? '<div class="hm">' + html.join('') + '</div>' : '';
