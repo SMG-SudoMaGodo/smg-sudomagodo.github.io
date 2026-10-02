@@ -159,12 +159,12 @@ async function icuProfile() {
   const P = S.profile, got = {}, changed = [];
   const ftp = ride && +(ride.ftp || 0); if (ftp >= 80 && ftp <= 600) got.ftp = Math.round(ftp);
   const lthr = ride && +(ride.lthr || ride.fthr || 0) || run && +(run.lthr || run.fthr || 0); if (lthr >= 100 && lthr <= 220) got.lthr = Math.round(lthr);
-  const w = +(a.icu_weight || a.weight || 0); if (w >= 35 && w <= 150) got.weight = Math.round(w * 10) / 10;
+  const w = +(a.icu_weight || a.weight || 0); S.icu.setW = w >= 35 && w <= 150 ? Math.round(w * 10) / 10 : null;  // usato se non c'è un peso giornaliero
   let tp = run && +(run.threshold_pace || 0);
   if (tp) { const sec = tp > 1.5 && tp < 8 ? 1000 / tp : tp >= 150 && tp <= 600 ? tp : 0; if (sec) got.thrPace = Math.round(sec); }
   const lab = { ftp: v => 'FTP ' + v + ' W', lthr: v => 'FC di soglia ' + v + ' bpm', weight: v => 'peso ' + String(v).replace('.', ',') + ' kg', thrPace: v => 'passo di soglia ' + Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0') };
   Object.keys(got).forEach(k => { if (P[k] !== got[k]) { P[k] = got[k]; changed.push(lab[k](got[k])); } });
-  S.icu.prof = Object.keys(got);
+  S.icu.prof = Object.keys(got).filter(k => k !== 'weight');
   return changed;
 }
 async function icuSync(quiet) {
@@ -174,9 +174,16 @@ async function icuSync(quiet) {
   try {
     let changed = [];
     try { changed = await icuProfile(); } catch (e) { if (e.status === 401 || e.status === 403) throw e; }
+    const well = await icu('/wellness?oldest=' + from + '&newest=' + t);
+    // peso: l'ultimo dato giornaliero (quello che arriva da Garmin) vince sul valore delle impostazioni
+    const lw = (well || []).filter(w => w.weight >= 35 && w.weight <= 150).map(w => [w.id, +w.weight]).sort().pop();
+    const v = lw ? Math.round(lw[1] * 10) / 10 : S.icu.setW;
+    if (v) {
+      if (!(S.icu.prof || []).includes('weight')) S.icu.prof = [...(S.icu.prof || []), 'weight'];
+      if (S.profile.weight !== v) { S.profile.weight = v; changed = changed.filter(x => !x.startsWith('peso')).concat('peso ' + String(v).replace('.', ',') + ' kg'); }
+    }
     const changedMsg = changed.length ? 'Aggiornato da Intervals.icu: ' + changed.join(', ') : null;
     if (changedMsg && quiet) toast(changedMsg);
-    const well = await icu('/wellness?oldest=' + from + '&newest=' + t);
     const has = w => ['hrv', 'restingHR', 'sleepScore', 'sleepSecs', 'readiness'].filter(k => w[k] != null && w[k] !== 0);
     const withData = (well || []).filter(w => has(w).length);
     const lastW = withData.map(w => w.id).sort().pop() || null;
