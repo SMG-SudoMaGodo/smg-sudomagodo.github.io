@@ -585,11 +585,11 @@ function bindOggi(p) {
       c[k] = n == null || isNaN(n) ? null : n;
     });
     c.pain = document.getElementById('ci_pain').checked;
-    S.checkins[d] = c; editCI = false; save();
+    S.checkins[d] = c; leaveEdit(); save();
     refreshToday(false); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
   });
-  on('ciEdit', () => { editCI = true; render(); });
-  on('ciCancel', () => { editCI = false; render(); });
+  on('ciEdit', () => { editCI = true; history.pushState({ view: 'oggi', edit: 1 }, ''); render(); });
+  on('ciCancel', () => { leaveEdit(); render(); });
   document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts(o => { o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.reroll = 0; o.exclude = []; }));
   document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => setOpts(o => { o.forceDur = b.dataset.dur ? +b.dataset.dur : undefined; }));
   on('aIndoor', () => {
@@ -926,14 +926,21 @@ $('#sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
 function show(v) { view = v; document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); render(); window.scrollTo(0, 0); }
 function go(v) {
   if (v === 'diario') weekOff = 0;
+  if (editCI && v !== 'oggi') { editCI = false; if (history.state && history.state.edit) history.replaceState({ view: 'oggi' }, ''); }
   if (v === view) { show(v); return; }
   if (v === 'oggi') { if (history.state && history.state.view && history.state.view !== 'oggi') { history.back(); return; } history.replaceState({ view: 'oggi' }, ''); }
   else if (view === 'oggi') history.pushState({ view: v }, '');
   else history.replaceState({ view: v }, '');
   show(v);
 }
+function leaveEdit() {
+  if (!editCI) return;
+  editCI = false;
+  if (history.state && history.state.edit) history.back();   // toglie il passo "modifica"
+}
 window.addEventListener('popstate', e => {
   const st = e.state || { view: 'oggi' };
+  if (editCI && !st.edit) { editCI = false; if ((st.view || 'oggi') === view) render(); }
   if (sheetOpen() && !st.sheet) $('#sheet').classList.remove('on');
   if ((st.view || 'oggi') !== view) show(st.view || 'oggi');
   if (pendingGo) { const v = pendingGo; pendingGo = null; go(v); }
