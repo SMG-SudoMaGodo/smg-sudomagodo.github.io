@@ -872,9 +872,12 @@ const GUIDE = [
     <p>Se i campi della notte sono vuoti, l'orologio non ha ancora sincronizzato: apri Garmin Connect, poi riapri SMG o premi Aggiorna nel Profilo. Va bene anche la sola faccina.</p>`],
   ['tl', 'Semaforo e indicatori', `<p><b>Verde</b>: via libera, anche sedute dure. <b>Arancione</b>: al massimo ritmo medio. <b>Rosso</b>: solo recupero; con un punteggio molto basso, riposo.</p>
     <p>Il punteggio unisce sensazione, HRV, FC a riposo, sonno, forma ed eventuali dolori.</p>
-    <ul><li><b>HRV</b>: conta la media degli ultimi 7 giorni rispetto alla tua norma (la fascia indicata nel riquadro). Una notte storta pesa poco.</li>
-    <li><b>FC a riposo</b>: più alta del solito è un segnale di stanchezza.</li>
-    <li><b>Forma</b>: fitness meno fatica, da Intervals. Molto negativa vuol dire carico accumulato.</li></ul>`],
+    <p><b>Come leggere i riquadri</b>: in alto il valore di stanotte, sotto il confronto in parole (verde se va bene, rosso se no), in basso l'andamento degli ultimi 7 giorni. La <b>linea tratteggiata</b> è il tuo riferimento: se la linea azzurra ci sta sopra o sotto, sei sopra o sotto il tuo solito.</p>
+    <ul><li><b>HRV</b>: più alta è meglio. Conta la media degli ultimi 7 giorni rispetto alla tua norma (la fascia indicata, calcolata su 60 giorni). Una notte storta pesa poco. Nelle prime settimane il confronto è con la media semplice.</li>
+    <li><b>FC a riposo</b>: più bassa è meglio. Qualche battito sopra il solito è un segnale di stanchezza o di malanno in arrivo.</li>
+    <li><b>Sonno</b>: il punteggio del Fenix; sotto 65 pesa sul semaforo.</li>
+    <li><b>Forma</b>: fitness meno fatica, da Intervals. La linea tratteggiata è lo zero: sopra sei fresco, molto sotto hai carico accumulato.</li></ul>
+    <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>`],
   ['bolt', 'La seduta del giorno', `<ul><li><b>Rilancia</b>: un'alternativa equivalente, se quella proposta non ti ispira.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
