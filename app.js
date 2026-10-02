@@ -163,7 +163,7 @@ async function icuProfile() {
   let tp = run && +(run.threshold_pace || 0);
   if (tp) { const sec = tp > 1.5 && tp < 8 ? 1000 / tp : tp >= 150 && tp <= 600 ? tp : 0; if (sec) got.thrPace = Math.round(sec); }
   const lab = { ftp: v => 'FTP ' + v + ' W', lthr: v => 'FC di soglia ' + v + ' bpm', weight: v => 'peso ' + String(v).replace('.', ',') + ' kg', thrPace: v => 'passo di soglia ' + Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0') };
-  Object.keys(got).forEach(k => { if (P[k] !== got[k]) { P[k] = got[k]; changed.push(lab[k](got[k])); } });
+  Object.keys(got).forEach(k => { if (P[k] !== got[k]) { if (k === 'ftp' && S.icu.prof && S.icu.prof.includes('ftp')) P.lastTest = today(); P[k] = got[k]; changed.push(lab[k](got[k])); } });
   S.icu.prof = Object.keys(got).filter(k => k !== 'weight');
   return changed;
 }
@@ -540,7 +540,7 @@ function welcomeHTML() {
   return '<div class="card" style="background:linear-gradient(135deg,rgba(45,180,242,.2),rgba(45,180,242,.05));border-color:rgba(45,180,242,.4)">' +
     '<h3>Benvenuto in SMG<span class="sp"></span><button class="btn ghost sm" id="wClose" style="padding:0 4px">' + ico('x') + '</button></h3>' +
     '<div class="t2" style="font-size:14px">Ogni mattina: <b style="color:var(--text)">check-in</b> di 10 secondi → <b style="color:var(--text)">semaforo</b> → seduta del giorno, sempre diversa. ' +
-    'Non ti piace? Tocca <b style="color:var(--text)">Rilancia</b>. Nel Profilo collega Intervals.icu per mandarla su Fenix, Edge e MyWhoosh, e imposta la località per il meteo.</div></div>';
+    'Non ti piace? Tocca <b style="color:var(--text)">Rilancia</b>. Il <b style="color:var(--text)">?</b> in alto apre la guida. Nel Profilo collega Intervals.icu per mandarla su Fenix, Edge e MyWhoosh, e imposta la località per il meteo.</div></div>';
 }
 
 /* ------------------------------------------------------------------ */
@@ -793,7 +793,8 @@ function renderProfilo() {
     '<br><span style="color:var(--t2)">Ultimo backup: ' + (S.lastBackup ? new Date(S.lastBackup).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }) : 'mai') + '</span></div>' +
     '<div class="row"><button class="btn" id="bExp">Esporta backup</button><button class="btn" id="bImp">Importa</button></div><input type="file" id="bFile" accept="application/json" hidden>' +
     '<button class="btn ghost sm full" id="bReset" style="margin-top:8px;color:var(--red)">Azzera tutto</button></div>' +
-    '<div class="foot">SMG · Sudo Ma Godo · v1.0</div>';
+    '<div class="card"><h3>Guida rapida</h3><div class="t2" style="font-size:14px;margin-bottom:10px">Come funziona SMG, funzione per funzione.</div><button class="btn full" id="guideOpen">Apri la guida</button></div>' +
+    '<div class="foot">SMG · Sudo Ma Godo · v1.1</div>';
 
   $('#v-profilo').innerHTML = h;
   bindProfilo();
@@ -824,6 +825,7 @@ function bindProfilo() {
   if (g('iSync')) g('iSync').onclick = () => icuSync(false);
   if (g('iOff')) g('iOff').onclick = () => { S.icu = { key: '', athlete: '0', auto: S.icu.auto, name: '', last: 0, ok: false }; save(); render(); };
   g('lHere').onclick = locate;
+  g('guideOpen').onclick = openGuide;
   const find = async () => {
     const q = g('lQ').value.trim(); if (q.length < 2) return;
     try {
@@ -851,6 +853,63 @@ function bindProfilo() {
 /* Navigazione con il tasto Indietro di Android:
    Oggi è la base; Diario/Profilo e le schede aperte sono passi nella cronologia. */
 const sheetOpen = () => $('#sheet').classList.contains('on');
+/* ------------------------------------------------------------------ */
+/* Guida rapida                                                        */
+/* ------------------------------------------------------------------ */
+const GUIDE = [
+  ['check', 'Ogni mattina', `<ol><li>Apri SMG: scarica da solo HRV, FC a riposo, sonno, peso e le attività di ieri da Intervals.icu.</li>
+    <li>Tocca la faccina che ti rappresenta e premi <b>Calcola il semaforo</b>. Se hai un acciacco, attiva l'interruttore.</li>
+    <li>La seduta parte da sola verso Intervals e arriva su Fenix, Edge e MyWhoosh. Per non aspettare, apri Garmin Connect.</li></ol>
+    <p>Se i campi della notte sono vuoti, l'orologio non ha ancora sincronizzato: apri Garmin Connect, poi riapri SMG o premi Aggiorna nel Profilo. Va bene anche la sola faccina.</p>`],
+  ['tl', 'Semaforo e indicatori', `<p><b>Verde</b>: via libera, anche sedute dure. <b>Arancione</b>: al massimo ritmo medio. <b>Rosso</b>: solo recupero; con un punteggio molto basso, riposo.</p>
+    <p>Il punteggio unisce sensazione, HRV, FC a riposo, sonno, forma ed eventuali dolori.</p>
+    <ul><li><b>HRV</b>: conta la media degli ultimi 7 giorni rispetto alla tua norma (la fascia indicata nel riquadro). Una notte storta pesa poco.</li>
+    <li><b>FC a riposo</b>: più alta del solito è un segnale di stanchezza.</li>
+    <li><b>Forma</b>: fitness meno fatica, da Intervals. Molto negativa vuol dire carico accumulato.</li></ul>`],
+  ['bolt', 'La seduta del giorno', `<ul><li><b>Rilancia</b>: un'alternativa equivalente, se quella proposta non ti ispira.</li>
+    <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
+    <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
+    <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola.</li>
+    <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li></ul>
+    <p>Ogni modifica dopo l'invio sostituisce la seduta su Intervals, Garmin e MyWhoosh.</p>`],
+  ['brain', 'Come sceglie', `<ul><li>Il semaforo fissa quanto può essere dura.</li>
+    <li>Massimo 2 sedute dure a settimana, mai due giorni duri di fila, una sola dura tra venerdì e domenica.</li>
+    <li>Lunedì e mercoledì tendono alla qualità, venerdì al fondo, sabato o domenica alla seduta dura del blocco.</li>
+    <li>Sport: in autunno e inverno preferisce la MTB; le sedute dure vanno su rulli o strada; con la pioggia rulli.</li>
+    <li>Evita le sedute fatte di recente e lo sport di ieri. Ogni 7 settimane propone il test FTP.</li>
+    <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
+    <p>Le etichette sotto la seduta spiegano il perché della scelta.</p>`],
+  ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>`],
+  ['cloud', 'Meteo e domani', `<p>La scheda in alto mostra oggi e domani, con la seduta probabile di domani e la finestra di 3 ore più asciutta se piove. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>`],
+  ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Tocca un giorno passato per vedere la seduta o segnarla.</li>
+    <li><b>Andamento della forma</b>: fitness (azzurro) e fatica (rosa) delle ultime 8 settimane. Se la fitness sale, stai migliorando. Tocca il grafico per i valori del giorno.</li></ul>`],
+  ['link', 'Intervals, Garmin, MyWhoosh', `<ul><li><b>SMG → Intervals → Garmin Connect → Fenix ed Edge</b>; e <b>Intervals → MyWhoosh</b> per le sedute indoor.</li>
+    <li>Da Garmin a Intervals arrivano attività, sonno, HRV, FC a riposo e peso. FTP e soglie no.</li>
+    <li>FTP, FC e passo di soglia SMG li legge da Intervals: <b>si cambiano lì</b> (e se vuoi anche su Garmin, per le zone dell'orologio).</li></ul>`],
+  ['user', 'Profilo', `<ul><li><b>Test FTP</b>: dopo il test aggiorna l'FTP su Intervals; SMG lo riconosce e riparte il conteggio delle 7 settimane.</li>
+    <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Tempi da concordare con chi ti segue.</li>
+    <li><b>La tua settimana</b>: giorni attivi, giorni lunghi e durata massima di ciascuno.</li>
+    <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri.</li></ul>`],
+  ['save', 'Backup e cambio telefono', `<p>Le sedute inviate e i dati di salute si recuperano da Intervals (ultimi 60 giorni). Giorni, sport, località e check-in a mano vivono solo sul telefono: <b>Esporta backup</b> una volta al mese (te lo ricorda l'app). Su un telefono nuovo: installa SMG, <b>Importa</b> il backup e reincolla la chiave di Intervals.</p>`],
+  ['wrench', 'Se qualcosa non va', `<ul><li><b>App non aggiornata</b>: chiudila del tutto e riaprila, anche due volte.</li>
+    <li><b>Seduta non arriva sull'orologio</b>: controlla nel Profilo che Intervals sia collegato (pallino verde) e sincronizza Garmin Connect.</li>
+    <li><b>Dati della notte mancanti</b>: guarda il riquadro sotto "Ultima sincronizzazione" nel Profilo, dice dove si ferma il dato.</li>
+    <li><b>Installazione</b>: tocca Installa una sola volta e attendi la conferma.</li></ul>`]
+];
+const GI = {
+  check: I.check, bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>', tl: '<rect x="8" y="2" width="8" height="20" rx="3"/><circle cx="12" cy="7" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="17" r="1.5"/>',
+  brain: '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>', stairs: '<path d="M3 20h5v-5h5v-5h5V5h3"/>',
+  cloud: '<path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 8.5 4.5 4.5 0 0 1 17.5 18z"/>', cal: I.cal, link: I.link,
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>', save: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+  wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>'
+};
+function openGuide() {
+  const sv = k => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + GI[k] + '</svg>';
+  openSheet('<div class="guide"><h2>Guida rapida</h2><p class="intro">Tocca un argomento per aprirlo.</p>' +
+    GUIDE.map(([k, t, b], i) => '<details' + (i === 0 ? ' open' : '') + '><summary><span class="gi">' + sv(k) + '</span>' + t + '<svg class="ch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></summary><div class="gb">' + b + '</div></details>').join('') +
+    '<button class="btn full" id="guideClose" style="margin-top:14px">Chiudi</button></div>', () => { document.getElementById('guideClose').onclick = () => closeSheet(); });
+}
+$('#helpBtn').onclick = openGuide;
 function openSheet(html, bind) {
   $('#sheetBody').innerHTML = html; $('#sheet').classList.add('on'); if (bind) bind();
   history.pushState({ view, sheet: 1 }, '');

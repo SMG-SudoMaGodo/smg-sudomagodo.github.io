@@ -229,6 +229,21 @@ details[open].steps summary svg{transform:rotate(180deg)}
 .fittip .tr i{width:10px;height:3px;border-radius:2px;display:inline-block}
 .fittip .tr b{min-width:24px;text-align:right}
 .fittip .tr span{color:var(--t2)}
+.qbtn{width:40px;height:40px;border-radius:50%;background:var(--s1);border:1px solid var(--line);color:var(--hot2);font-weight:800;font-size:18px;display:grid;place-items:center}
+.guide h2{margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.4px}
+.guide .intro{color:var(--t2);font-size:14px;margin:0 0 12px}
+.guide details{border-top:1px solid var(--line)}
+.guide summary{list-style:none;padding:14px 2px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px;cursor:pointer}
+.guide summary::-webkit-details-marker{display:none}
+.guide summary .gi{width:30px;height:30px;border-radius:9px;background:var(--s2);display:grid;place-items:center;color:var(--hot);flex:none}
+.guide summary .gi svg{width:17px;height:17px}
+.guide summary .ch{margin-left:auto;width:18px;height:18px;color:var(--mut);transition:.2s}
+.guide details[open] summary .ch{transform:rotate(180deg)}
+.guide .gb{padding:0 2px 14px 40px;color:var(--t2);font-size:14px}
+.guide .gb p{margin:0 0 8px}
+.guide .gb ul,.guide .gb ol{margin:0 0 8px;padding-left:18px}
+.guide .gb li{margin:3px 0}
+.guide .gb b{color:var(--text)}
 .streak{display:flex;align-items:center;gap:14px}
 .streak .fire{font-size:34px;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;font-style:italic}
 
@@ -276,6 +291,7 @@ nav button.on svg{color:var(--hot2)}
 <body>
 <header>
   <div class="brand"><img src="logo-v2.png" alt=""><div><b>SMG</b><small>SudoMaGodo</small></div></div>
+  <button class="qbtn" id="helpBtn" aria-label="Guida rapida">?</button>
 </header>
 <main>
   <section class="view on" id="v-oggi"></section>
