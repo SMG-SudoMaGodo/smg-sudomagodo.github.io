@@ -149,11 +149,33 @@ async function icuConnect() {
     return false;
   }
 }
+// FTP, peso, FC di soglia e passo di soglia dalle impostazioni di Intervals.icu
+async function icuProfile() {
+  const a = await icu(''); if (!a) return [];
+  const ss = a.sportSettings || [];
+  const has = (s, t) => (s.types || []).includes(t);
+  const ride = ss.find(s => has(s, 'Ride')) || ss.find(s => has(s, 'VirtualRide') || has(s, 'MountainBikeRide') || has(s, 'GravelRide'));
+  const run = ss.find(s => has(s, 'Run'));
+  const P = S.profile, got = {}, changed = [];
+  const ftp = ride && +(ride.ftp || 0); if (ftp >= 80 && ftp <= 600) got.ftp = Math.round(ftp);
+  const lthr = ride && +(ride.lthr || ride.fthr || 0) || run && +(run.lthr || run.fthr || 0); if (lthr >= 100 && lthr <= 220) got.lthr = Math.round(lthr);
+  const w = +(a.icu_weight || a.weight || 0); if (w >= 35 && w <= 150) got.weight = Math.round(w * 10) / 10;
+  let tp = run && +(run.threshold_pace || 0);
+  if (tp) { const sec = tp > 1.5 && tp < 8 ? 1000 / tp : tp >= 150 && tp <= 600 ? tp : 0; if (sec) got.thrPace = Math.round(sec); }
+  const lab = { ftp: v => 'FTP ' + v + ' W', lthr: v => 'FC di soglia ' + v + ' bpm', weight: v => 'peso ' + String(v).replace('.', ',') + ' kg', thrPace: v => 'passo di soglia ' + Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0') };
+  Object.keys(got).forEach(k => { if (P[k] !== got[k]) { P[k] = got[k]; changed.push(lab[k](got[k])); } });
+  S.icu.prof = Object.keys(got);
+  return changed;
+}
 async function icuSync(quiet) {
   if (!icuOn() || busy.sync) return;
   busy.sync = true; if (!quiet) render();
   const t = today(), from = E.addDays(t, -28);
   try {
+    let changed = [];
+    try { changed = await icuProfile(); } catch (e) { if (e.status === 401 || e.status === 403) throw e; }
+    const changedMsg = changed.length ? 'Aggiornato da Intervals.icu: ' + changed.join(', ') : null;
+    if (changedMsg && quiet) toast(changedMsg);
     const well = await icu('/wellness?oldest=' + from + '&newest=' + t);
     const has = w => ['hrv', 'restingHR', 'sleepScore', 'sleepSecs', 'readiness'].filter(k => w[k] != null && w[k] !== 0);
     const withData = (well || []).filter(w => has(w).length);
@@ -184,7 +206,7 @@ async function icuSync(quiet) {
     });
     S.icu.last = Date.now(); save();
     refreshToday(false);
-    if (!quiet) toast('Dati aggiornati da Intervals.icu');
+    if (!quiet) toast(changedMsg || 'Dati aggiornati da Intervals.icu');
   } catch (e) {
     S.icu.diag = Object.assign({}, S.icu.diag, { err: e.status ? 'errore ' + e.status : 'rete non raggiungibile' }); save();
     if (!quiet) toast(e.status === 401 || e.status === 403 ? 'Chiave API non valida' : 'Sincronizzazione non riuscita');
@@ -587,14 +609,17 @@ function renderProfilo() {
   const P = S.profile;
   const pace = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   const sw = (id, on) => '<span class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><i></i></span>';
-  const num = (id, v, unit) => '<div class="unit field"><div class="unit"><input inputmode="decimal" id="' + id + '" value="' + v + '"><span>' + unit + '</span></div></div>';
+  const fromIcu = k => icuOn() && (S.icu.prof || []).includes(k);
+  const num = (id, v, unit, k) => '<div class="unit field"><div class="unit"><input inputmode="decimal" id="' + id + '" value="' + v + '"' + (k && fromIcu(k) ? ' disabled style="opacity:.75"' : '') + '><span>' + unit + '</span></div></div>';
+  const srcNote = k => fromIcu(k) ? '<small style="color:var(--hot2)">da Intervals.icu</small>' : '';
   let h = '<div class="hello"><div class="d">Profilo</div><h1>Il tuo <em>motore</em></h1></div>';
 
   h += '<div class="card"><h3>Atleta</h3>' +
-    '<div class="set"><div class="l"><b>FTP</b><small>' + (P.ftp / P.weight).toFixed(2) + ' W/kg</small></div><div class="v">' + num('pFtp', P.ftp, 'W') + '</div></div>' +
-    '<div class="set"><div class="l"><b>Peso</b></div><div class="v">' + num('pW', P.weight, 'kg') + '</div></div>' +
-    '<div class="set"><div class="l"><b>FC di soglia</b><small>Zone cardio per bici e corsa</small></div><div class="v">' + num('pLthr', P.lthr, 'bpm') + '</div></div>' +
-    '<div class="set"><div class="l"><b>Passo di soglia</b><small>Per le sedute di corsa</small></div><div class="v">' + num('pPace', pace(P.thrPace), '/km') + '</div></div>' +
+    '<div class="set"><div class="l"><b>FTP</b><small>' + (P.ftp / P.weight).toFixed(2).replace('.', ',') + ' W/kg</small>' + srcNote('ftp') + '</div><div class="v">' + num('pFtp', P.ftp, 'W', 'ftp') + '</div></div>' +
+    '<div class="set"><div class="l"><b>Peso</b>' + srcNote('weight') + '</div><div class="v">' + num('pW', String(P.weight).replace('.', ','), 'kg', 'weight') + '</div></div>' +
+    '<div class="set"><div class="l"><b>FC di soglia</b><small>Zone cardio per bici e corsa</small>' + srcNote('lthr') + '</div><div class="v">' + num('pLthr', P.lthr, 'bpm', 'lthr') + '</div></div>' +
+    '<div class="set"><div class="l"><b>Passo di soglia</b><small>Per le sedute di corsa</small>' + srcNote('thrPace') + '</div><div class="v">' + num('pPace', pace(P.thrPace), '/km', 'thrPace') + '</div></div>' +
+    ((S.icu.prof || []).length && icuOn() ? '<div class="mut" style="font-size:12.5px;margin-top:8px">I valori da Intervals.icu si aggiornano a ogni sincronizzazione: per cambiarli, modificali su Intervals.</div>' : '') +
     '<div class="set"><div class="l"><b>Ultimo test FTP</b><small>' + longDate(P.lastTest) + ' · prossimo proposto dopo 7 settimane</small></div><button class="btn sm" id="pTest">Fatto oggi</button></div></div>';
 
   h += '<div class="card"><h3>Sport</h3>' +
