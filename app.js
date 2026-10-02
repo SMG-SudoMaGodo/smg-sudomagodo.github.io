@@ -170,7 +170,7 @@ async function icuProfile() {
 async function icuSync(quiet) {
   if (!icuOn() || busy.sync) return;
   busy.sync = true; if (!quiet) render();
-  const t = today(), from = E.addDays(t, -28);
+  const t = today(), from = E.addDays(t, -60);
   try {
     let changed = [];
     try { changed = await icuProfile(); } catch (e) { if (e.status === 401 || e.status === 403) throw e; }
@@ -196,17 +196,21 @@ async function icuSync(quiet) {
       put('hrv', w.hrv); put('rhr', w.restingHR); put('sleep', w.sleepScore);
       if (w.sleepSecs) put('sleepH', w.sleepSecs / 3600);
       if (w.readiness) put('garmin', w.readiness);
-      if (w.ctl != null && w.atl != null) { c.tsb = Math.round(w.ctl - w.atl); c.src.tsb = 'icu'; }
+      if (w.ctl != null && w.atl != null) { c.tsb = Math.round(w.ctl - w.atl); c.src.tsb = 'icu'; (S.fit || (S.fit = {}))[d] = [Math.round(w.ctl * 10) / 10, Math.round(w.atl * 10) / 10]; }
       if (!Object.keys(c).some(k => k !== 'src')) delete S.checkins[d];
     });
-    const acts = await icu('/activities?oldest=' + E.addDays(t, -21) + '&newest=' + t);
+    const acts = await icu('/activities?oldest=' + E.addDays(t, -42) + '&newest=' + t);
     const byDay = {};
     (acts || []).forEach(a => {
       const d = (a.start_date_local || '').slice(0, 10); if (!d) return;
-      (byDay[d] = byDay[d] || []).push({ sport: E.activitySport(a.type), level: E.activityLevel(a), name: a.name || a.type,
-        min: Math.round((a.moving_time || a.elapsed_time || 0) / 60), load: a.icu_training_load || 0 });
+      const rpe = +(a.icu_rpe || a.perceived_exertion || 0), feel = +(a.feel || 0);
+      (byDay[d] = byDay[d] || []).push({ sport: E.activitySport(a.type), level: E.activityLevel(a, S.profile), name: a.name || a.type,
+        min: Math.round((a.moving_time || a.elapsed_time || 0) / 60), load: a.icu_training_load || 0,
+        rpe: rpe >= 1 && rpe <= 10 ? rpe : null, feel: feel >= 1 && feel <= 5 ? feel : null });
     });
-    for (let d = E.addDays(t, -21); d <= t; d = E.addDays(d, 1)) { if (byDay[d]) S.activities[d] = byDay[d]; else delete S.activities[d]; }
+    for (let d = E.addDays(t, -42); d <= t; d = E.addDays(d, 1)) { if (byDay[d]) S.activities[d] = byDay[d]; else delete S.activities[d]; }
+    // storico: le sedute SMG inviate restano nel calendario di Intervals, così il diario si ricostruisce anche dopo un cambio di telefono
+    try { await icuRebuild(E.addDays(t, -60), E.addDays(t, -1), byDay); } catch (e) {}
     Object.keys(byDay).forEach(d => {
       const p = S.plans[d];
       if (p && !p.rest && p.status === 'planned' && byDay[d].some(a => a.sport !== 'strength' && a.min >= 15)) { p.status = 'done'; p.via = 'icu'; }
@@ -219,6 +223,28 @@ async function icuSync(quiet) {
     if (!quiet) toast(e.status === 401 || e.status === 403 ? 'Chiave API non valida' : 'Sincronizzazione non riuscita');
   }
   busy.sync = false; render();
+}
+const ICU_SPORT = { VirtualRide: 'indoor', MountainBikeRide: 'mtb', GravelRide: 'mtb', Ride: 'road', Run: 'run' };
+async function icuRebuild(from, to, byDay) {
+  const evs = await icu('/events?oldest=' + from + '&newest=' + to + '&category=WORKOUT');
+  let n = 0;
+  (evs || []).forEach(ev => {
+    const id = ev.external_id || ''; if (!id.startsWith('smg-')) return;
+    const d = id.slice(4, 14); if (S.plans[d] || d >= today()) return;
+    const name = (ev.name || '').replace(/^SMG · /, '');
+    const tid = Object.keys(E.TEMPLATES).find(k => E.TEMPLATES[k].name === name); if (!tid) return;
+    const tp = E.TEMPLATES[tid];
+    let sport = ev.indoor ? 'indoor' : ICU_SPORT[ev.type] || tp.sports[0];
+    if (!tp.sports.includes(sport)) sport = tp.sports[0];
+    const secs = +(ev.moving_time || (ev.workout_doc && ev.workout_doc.duration) || 0);
+    const dur = secs ? Math.round(secs / 300) * 5 : tp.dur[0];
+    const done = (byDay[d] || S.activities[d] || []).some(a => a.sport !== 'strength' && a.min >= 15);
+    S.plans[d] = { date: d, tid, sport, level: tp.level, dur: Math.max(tp.dur[0], dur), status: done ? 'done' : 'planned', via: done ? 'icu' : undefined,
+      pushed: true, rebuilt: true, v: ENGINE_V, opts: {}, reasons: ['Ricostruita da Intervals.icu'] };
+    n++;
+  });
+  if (n) save();
+  return n;
 }
 async function icuPush(p, quiet) {
   if (!icuOn() || !p || p.rest) return;
@@ -401,7 +427,13 @@ const IC = {
 function metric(key, label, unit, d, better, fmt) {
   const c = S.checkins[d] || {}; const v = c[key]; if (v == null || v === '') return '';
   const a = avgPrev(key, d); let dl = '<span class="d">media in arrivo</span>';
-  if (a != null) {
+  const hs = key === 'hrv' ? E.hrvStatus(S.checkins, d) : null;
+  if (hs) {
+    const band = Math.round(hs.lo) + '–' + Math.round(hs.hi);
+    dl = hs.status === 'low' ? '<span class="d down">▼ 7 gg sotto norma ' + band + '</span>'
+       : hs.status === 'high' ? '<span class="d up">▲ 7 gg sopra norma ' + band + '</span>'
+       : '<span class="d">norma ' + band + '</span>';
+  } else if (a != null) {
     const diff = v - a, rel = Math.abs(diff) < (key === 'rhr' ? 2 : a * 0.03);
     const good = better === 'up' ? diff > 0 : diff < 0;
     dl = rel ? '<span class="d">in media</span>' : '<span class="d ' + (good ? 'up' : 'down') + '">' + (diff > 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(diff)) + ' vs media</span>';
@@ -453,22 +485,57 @@ function wxDayHTML(d, label, cls) {
     '<div class="desc">' + WXD(w.code) + '</div><div class="meta"><span style="color:' + (w.rain >= 50 ? 'var(--hot2)' : 'inherit') + '">' + drop + w.rain + '%' + (w.mm >= 0.5 ? ' · ' + Math.round(w.mm) + ' mm' : '') + '</span>' +
     '<span>' + wind + Math.round(w.wind) + ' km/h</span></div></div>';
 }
-function weatherHTML(d) {
+// seduta probabile di domani: stessa logica della proposta, come se oggi facessi la seduta prevista
+function tomorrowPreview(d) {
   const t = E.addDays(d, 1); const cfg = S.profile.days[E.dow(t)] || {};
-  if (!S.loc) return '<div class="card wxc"><div class="empty">' + ico('pin') + '<div style="flex:1">Imposta la località per vedere il meteo di oggi e domani</div><button class="btn sm" id="wxSet">Imposta</button></div></div>';
-  const w = wxFor(t);
-  let plan = !cfg.on ? '<b>Domani riposo.</b>' : '<b>Domani ' + (cfg.long ? 'giorno lungo' : 'allenamento') + ', fino a ' + fmtMin(cfg.max) + '.</b>';
+  if (!cfg.on) return null;
+  const pv = E.propose(S, t, { weather: wxFor(t), assumeDone: d });
+  return pv.rest ? null : pv;
+}
+function planLine(d) {
+  const t = E.addDays(d, 1); const cfg = S.profile.days[E.dow(t)] || {}; const w = wxFor(t);
+  const pv = tomorrowPreview(d);
+  const sportTxt = s => ({ indoor: 'sui rulli', mtb: 'in MTB', road: 'in bici da strada', run: 'di corsa' })[s];
+  let plan = !cfg.on ? '<b>Domani riposo.</b>' : pv
+    ? '<b>Domani probabile: ' + esc(E.TEMPLATES[pv.tid].name) + '</b> ' + sportTxt(pv.sport) + ', ' + fmtMin(pv.dur) + '.'
+    : '<b>Domani ' + (cfg.long ? 'giorno lungo' : 'allenamento') + ', fino a ' + fmtMin(cfg.max) + '.</b>';
   if (cfg.on && w) {
     const bad = w.rain >= 60 || w.mm >= 3, meh = !bad && (w.rain >= 40 || w.tmax < 4);
-    if (bad) plan += w.win && w.win.v <= 30 ? ' Pioggia probabile, ma tra le ' + w.win.h + ' e le ' + (w.win.h + 3) + ' dovrebbe reggere: altrimenti rulli.' : ' Pioggia probabile: prepara i rulli.';
+    const win = w.win && w.win.v <= 30 ? ' tra le ' + w.win.h + ' e le ' + (w.win.h + 3) : '';
+    if (bad) plan += pv && pv.sport === 'indoor' ? ' Pioggia probabile, per questo è sui rulli' + (win ? ': se preferisci uscire, la finestra più asciutta è' + win + '.' : '.') : win ? ' Pioggia probabile, ma' + win + ' dovrebbe reggere.' : ' Pioggia probabile: tieni pronti i rulli.';
     else if (meh) plan += ' Tempo incerto' + (w.win && w.win.v < w.rain ? ': meglio uscire tra le ' + w.win.h + ' e le ' + (w.win.h + 3) + '.' : ', tieni pronti i rulli.');
     else if (w.wind >= 35) plan += ' Asciutto ma ventoso: meglio la MTB nel bosco.';
-    else plan += ' Si preannuncia una bella giornata per uscire.';
+    else if (!pv || pv.sport !== 'indoor') plan += ' Si preannuncia una bella giornata per uscire.';
   }
-  return '<div class="card wxc"><div class="days">' + wxDayHTML(d, 'Oggi', '') + wxDayHTML(t, 'Domani, ' + GG[E.parse(t).getDay()], 'tmw') + '</div>' +
-    '<div class="plan">' + ico('cal') + '<div>' + plan + '</div></div></div>';
+  if (pv) plan += '<div class="mut" style="font-size:12.5px;margin-top:3px">Si conferma domattina dopo il check-in.</div>';
+  return '<div class="plan">' + (pv ? '<span style="color:' + SH[pv.sport] + ';display:flex">' + ico(pv.sport) + '</span>' : ico('cal')) + '<div>' + plan + '</div></div>';
+}
+function weatherHTML(d) {
+  const t = E.addDays(d, 1);
+  if (!S.loc) return '<div class="card wxc"><div class="empty">' + ico('pin') + '<div style="flex:1">Imposta la località per vedere il meteo di oggi e domani</div><button class="btn sm" id="wxSet">Imposta</button></div>' + planLine(d) + '</div>';
+  return '<div class="card wxc"><div class="days">' + wxDayHTML(d, 'Oggi', '') + wxDayHTML(t, 'Domani, ' + GG[E.parse(t).getDay()], 'tmw') + '</div>' + planLine(d) + '</div>';
 }
 
+function exportBackup() {
+  S.lastBackup = Date.now(); save();
+  const data = JSON.parse(JSON.stringify(S)); data.icu.key = ''; data.icu.ok = false;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = 'smg-backup-' + today() + '.json'; document.body.appendChild(a); a.click(); a.remove();
+  toast('Backup salvato nei Download');
+}
+// promemoria mensile, solo quando c'è qualcosa da salvare
+function backupDue() {
+  if (Object.keys(S.plans).length < 7) return false;
+  if (!S.created) { S.created = Date.now(); save(); }
+  if (Date.now() - S.created < 14 * 86400e3) return false;
+  if (S.backupSnooze && Date.now() < S.backupSnooze) return false;
+  return !S.lastBackup || Date.now() - S.lastBackup > 30 * 86400e3;
+}
+function backupHTML() {
+  return '<div class="card"><h3>Salva una copia di sicurezza</h3><div class="t2" style="font-size:14px">' +
+    (icuOn() ? 'Le sedute le recupero da Intervals.icu, ma giorni, sport, località e check-in a mano vivono solo su questo telefono.' : 'Diario, check-in e impostazioni vivono solo su questo telefono.') +
+    ' Un backup al mese basta.</div><div class="row" style="margin-top:12px"><button class="btn hot" id="bkNow">Salva backup</button><button class="btn" id="bkLater">Più tardi</button></div></div>';
+}
 function welcomeHTML() {
   return '<div class="card" style="background:linear-gradient(135deg,rgba(45,180,242,.2),rgba(45,180,242,.05));border-color:rgba(45,180,242,.4)">' +
     '<h3>Benvenuto in SMG<span class="sp"></span><button class="btn ghost sm" id="wClose" style="padding:0 4px">' + ico('x') + '</button></h3>' +
@@ -485,6 +552,7 @@ function renderOggi() {
   const title = p.rest ? 'Oggi si <em>ricarica</em>.' : p.status === 'planned' && p.light === 'red' ? 'Oggi si <em>recupera</em>.' : p.status === 'done' ? 'Sudato. <em>Goduto.</em>' : p.level >= 4 ? 'Oggi si <em>suda</em>.' : p.level === 3 ? 'Oggi si <em>spinge</em> il giusto.' : 'Oggi si <em>gode</em>.';
   let h = '<div class="hello"><div class="d">' + longDate(d) + '</div><h1>' + title + '</h1></div>';
   if (S.welcome) h += welcomeHTML();
+  else if (backupDue()) h += backupHTML();
   h += weatherHTML(d);
   if (!p.rest || !p.redRest) h += (rd && !editCI) ? lightHTML(rd) : checkinHTML(d);
   else h += lightHTML(rd);
@@ -500,6 +568,8 @@ function bindOggi(p) {
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on('wClose', () => { S.welcome = false; save(); render(); });
   on('wxSet', () => go('profilo'));
+  on('bkNow', () => { exportBackup(); render(); });
+  on('bkLater', () => { S.backupSnooze = Date.now() + 7 * 86400e3; save(); render(); });
   document.querySelectorAll('[data-feel]').forEach(b => b.onclick = () => {
     document.querySelectorAll('[data-feel]').forEach(x => x.classList.toggle('on', x === b));
   });
@@ -548,6 +618,64 @@ function dayDone(d) {
   if (p && !p.rest && p.status === 'done') { const st = E.stats(E.build(p, S.profile), p.sport, S.profile); return { min: st.min, load: st.tss, level: p.level }; }
   return null;
 }
+const FIT_C = '#1E9BDB', FAT_C = '#E5608E';   // colori verificati per daltonismo sul fondo scuro
+const FIT_G = { W: 340, H: 150, L: 26, R: 6, T: 8, B: 22 };
+function fitPoints() { const t = today(), pts = []; for (let i = 55; i >= 0; i--) { const d = E.addDays(t, -i); const v = S.fit && S.fit[d]; if (v) pts.push({ d, ctl: v[0], atl: v[1] }); } return pts; }
+function fitScale(pts) {
+  const g = FIT_G; const all = pts.flatMap(p => [p.ctl, p.atl]);
+  let lo = Math.floor(Math.min(...all) / 10) * 10, hi = Math.ceil(Math.max(...all) / 10) * 10; if (hi - lo < 20) hi = lo + 20;
+  const n = pts.length - 1;
+  return { lo, hi, n, x: i => g.L + (g.W - g.L - g.R) * (n ? i / n : 0), y: v => g.T + (g.H - g.T - g.B) * (1 - (v - lo) / (hi - lo)) };
+}
+function fitnessHTML() {
+  const pts = fitPoints();
+  if (pts.length < 7) return '<div class="card"><h3>Andamento della forma</h3><div class="t2" style="font-size:14px">' +
+    (icuOn() ? 'Il grafico compare dopo qualche giorno di dati da Intervals.icu.' : 'Collega Intervals.icu nel Profilo per vedere come cresce la tua forma.') + '</div></div>';
+  const g = FIT_G, sc = fitScale(pts), { n, x, y } = sc;
+  const path = k => pts.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p[k]).toFixed(1)).join(' ');
+  let grid = '';
+  for (let k = 0; k <= 2; k++) { const v = sc.lo + (sc.hi - sc.lo) * k / 2; grid += '<line x1="' + g.L + '" x2="' + (g.W - g.R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#22334D" stroke-width="1"/><text x="' + (g.L - 6) + '" y="' + (y(v) + 3.5) + '" text-anchor="end" font-size="10" fill="#7C8DA6">' + Math.round(v) + '</text>'; }
+  const dl = d => { const z = E.parse(d); return z.getDate() + ' ' + MM[z.getMonth()].slice(0, 3); };
+  const xl = [0, Math.round(n / 2), n].map(i => '<text x="' + x(i) + '" y="' + (g.H - 6) + '" text-anchor="' + (i === 0 ? 'start' : i === n ? 'end' : 'middle') + '" font-size="10" fill="#7C8DA6">' + (i === n ? 'oggi' : dl(pts[i].d)) + '</text>').join('');
+  const last = pts[n], ago = pts[Math.max(0, n - 28)];
+  const dFit = Math.round(last.ctl - ago.ctl), tsb = Math.round(last.ctl - last.atl);
+  const tsbTxt = tsb < -25 ? 'molto affaticato' : tsb < -10 ? 'carico, in costruzione' : tsb <= 5 ? 'in equilibrio' : 'fresco';
+  const summary = 'Fitness ' + Math.round(last.ctl) + (n >= 28 ? ', ' + (dFit >= 0 ? '+' : '−') + Math.abs(dFit) + ' in 4 settimane' : '') + '. Forma ' + (tsb > 0 ? '+' : tsb < 0 ? '−' : '') + Math.abs(tsb) + ': ' + tsbTxt + '.';
+  return '<div class="card fit"><h3>Andamento della forma</h3><div style="font-size:15px;font-weight:600;margin:-4px 0 8px">' + summary + '</div>' +
+    '<div class="legend"><span><i style="background:' + FIT_C + '"></i>Fitness ' + Math.round(last.ctl) + '</span><span><i style="background:' + FAT_C + '"></i>Fatica ' + Math.round(last.atl) + '</span></div>' +
+    '<div class="fitwrap"><svg viewBox="0 0 ' + g.W + ' ' + g.H + '" style="width:100%;display:block" role="img" aria-label="' + esc(summary) + '">' + grid + xl +
+    '<path d="' + path('atl') + '" fill="none" stroke="' + FAT_C + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/>' +
+    '<path d="' + path('ctl') + '" fill="none" stroke="' + FIT_C + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<circle cx="' + x(n) + '" cy="' + y(last.ctl) + '" r="4" fill="' + FIT_C + '" stroke="#111B2B" stroke-width="2"/><circle cx="' + x(n) + '" cy="' + y(last.atl) + '" r="4" fill="' + FAT_C + '" stroke="#111B2B" stroke-width="2"/>' +
+    '<g id="fitHover" style="display:none"><line id="fhL" y1="' + g.T + '" y2="' + (g.H - g.B) + '" stroke="#B3C2D6" stroke-width="1" opacity=".6"/><circle id="fhA" r="4" fill="' + FIT_C + '" stroke="#111B2B" stroke-width="2"/><circle id="fhB" r="4" fill="' + FAT_C + '" stroke="#111B2B" stroke-width="2"/></g>' +
+    '<rect id="fitHit" x="' + g.L + '" y="0" width="' + (g.W - g.L - g.R) + '" height="' + g.H + '" fill="transparent"/></svg><div class="fittip" id="fitTip"></div></div>' +
+    '<div class="mut" style="font-size:12.5px;margin-top:8px">Fitness: il carico medio delle ultime 6 settimane, sale se ti alleni con costanza. Fatica: quello dell\'ultima settimana. Forma: la differenza tra i due. Tocca il grafico per i valori di ogni giorno.</div></div>';
+}
+function bindFitness() {
+  const hit = document.getElementById('fitHit'); if (!hit) return;
+  const svg = hit.ownerSVGElement, tip = document.getElementById('fitTip'), gH = document.getElementById('fitHover');
+  const pts = fitPoints(), g = FIT_G, { n, x, y } = fitScale(pts);
+  const show = ev => {
+    const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * g.W;
+    const i = Math.max(0, Math.min(n, Math.round((px - g.L) / (g.W - g.L - g.R) * n))); const p = pts[i];
+    gH.style.display = '';
+    const ln = document.getElementById('fhL'); ln.setAttribute('x1', x(i)); ln.setAttribute('x2', x(i));
+    const a = document.getElementById('fhA'), b = document.getElementById('fhB');
+    a.setAttribute('cx', x(i)); a.setAttribute('cy', y(p.ctl)); b.setAttribute('cx', x(i)); b.setAttribute('cy', y(p.atl));
+    tip.textContent = '';
+    const z = E.parse(p.d); const head = document.createElement('div'); head.className = 'th'; head.textContent = z.getDate() + ' ' + MM[z.getMonth()]; tip.appendChild(head);
+    [['Fitness', p.ctl, FIT_C], ['Fatica', p.atl, FAT_C], ['Forma', p.ctl - p.atl, null]].forEach(([lab, v, c]) => {
+      const row = document.createElement('div'); row.className = 'tr';
+      const k = document.createElement('i'); if (c) k.style.background = c; else k.style.opacity = 0; row.appendChild(k);
+      const b2 = document.createElement('b'); b2.textContent = (lab === 'Forma' && v > 0 ? '+' : '') + Math.round(v); row.appendChild(b2);
+      const sp = document.createElement('span'); sp.textContent = lab; row.appendChild(sp); tip.appendChild(row);
+    });
+    tip.style.display = 'block';
+    const left = x(i) / g.W * r.width; tip.style.left = Math.max(0, Math.min(r.width - tip.offsetWidth, left - tip.offsetWidth / 2)) + 'px';
+  };
+  const hide = () => { gH.style.display = 'none'; tip.style.display = 'none'; };
+  hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show); hit.addEventListener('pointerleave', hide);
+}
 function renderDiario() {
   const t = today(); const mon = E.addDays(E.monday(t), weekOff * 7); const sun = E.addDays(mon, 6);
   const a = E.parse(mon), b = E.parse(sun);
@@ -560,7 +688,7 @@ function renderDiario() {
     let icon = '<div class="sporticon" style="background:var(--s2);color:var(--mut)">' + ico('moon') + '</div>', title = 'Riposo', sub = '', stc = 'rest', stt = '';
     if (p && !p.rest) {
       const tp = E.TEMPLATES[p.tid]; icon = sportIcon(p.sport); title = tp.name; sub = E.SPORTS[p.sport].name + ' · ' + fmtMin(p.dur) + ' · ' + E.LEVELS[p.level];
-      stc = p.status === 'done' ? 'done' : p.status === 'skipped' ? 'skip' : 'plan'; stt = p.status === 'done' ? 'Fatta' : p.status === 'skipped' ? 'Saltata' : d < t ? 'Non segnata' : 'Da fare';
+      stc = p.status === 'done' ? 'done' : p.status === 'skipped' ? 'skip' : 'plan'; stt = p.status === 'done' ? 'Fatta' : p.status === 'skipped' ? 'Saltata' : d < t ? (icuOn() ? 'Non fatta' : 'Non segnata') : 'Da fare';
     } else if (acts.length) {
       icon = sportIcon(acts[0].sport === 'other' ? 'road' : acts[0].sport); title = acts[0].name; sub = fmtMin(acts.reduce((s, y) => s + y.min, 0)) + ' · da Intervals.icu'; stc = 'done'; stt = 'Fatta';
     } else if (d > t && cfg.on) {
@@ -580,12 +708,13 @@ function renderDiario() {
   const variety = new Set(); for (let i = 0; i < 30; i++) { const p = S.plans[E.addDays(t, -i)]; if (p && p.status === 'done' && p.tid) variety.add(p.tid); }
   const deload = E.isDeload(S.profile, mon);
   let h = '<div class="hello"><div class="d">Diario</div><h1>La tua <em>settimana</em></h1></div>' +
-    '<div class="weeknav"><button id="wPrev">' + ico('left') + '</button><b>' + label + (deload ? ' <span class="tag">Scarico</span>' : '') + '</b><button id="wNext"' + (weekOff >= 1 ? ' disabled style="opacity:.3"' : '') + '>' + ico('right') + '</button></div>' +
+    '<div class="weeknav"><button id="wPrev">' + ico('left') + '</button><b>' + label + ' <span class="tag">' + (deload ? 'Scarico' : 'Costruzione ' + (E.blockWeek(S.profile, mon) + 1) + '/3') + '</span></b><button id="wNext"' + (weekOff >= 1 ? ' disabled style="opacity:.3"' : '') + '>' + ico('right') + '</button></div>' +
     '<div class="tiles"><div class="tile"><b class="num">' + n + '</b><small>Sedute</small></div><div class="tile"><b class="num">' + fmtMin(min) + '</b><small>Tempo</small></div>' +
     '<div class="tile"><b class="num">' + Math.round(load) + '</b><small>Carico</small></div><div class="tile"><b class="num">' + hard + '</b><small>Dure</small></div></div>' + rows +
     '<div class="card" style="margin-top:14px"><div class="streak"><div class="fire">' + streak + '</div><div><b>' + (streak === 1 ? 'settimana' : 'settimane') + ' di fila con almeno 3 sedute</b><div class="mut" style="font-size:13px">' +
-    variety.size + ' sedute diverse negli ultimi 30 giorni</div></div></div></div>';
+    variety.size + ' sedute diverse negli ultimi 30 giorni</div></div></div></div>' + fitnessHTML();
   $('#v-diario').innerHTML = h;
+  bindFitness();
   $('#wPrev').onclick = () => { weekOff--; render(); };
   $('#wNext').onclick = () => { if (weekOff < 1) { weekOff++; render(); } };
   document.querySelectorAll('[data-day]').forEach(b => b.onclick = () => {
@@ -659,7 +788,9 @@ function renderProfilo() {
   h += '<div class="card"><h3>Meteo</h3><div class="set"><div class="l"><b>' + esc(S.loc ? S.loc.name : 'Nessuna località') + '</b><small>Con pioggia o freddo la proposta va sui rulli</small></div><button class="btn sm" id="lHere">' + ico('pin') + 'Qui</button></div>' +
     '<div class="row" style="margin-top:6px"><input id="lQ" placeholder="Cerca un comune…"><button class="btn" id="lFind" style="flex:none">Cerca</button></div><div class="results" id="lRes"></div></div>';
 
-  h += '<div class="card"><h3>Dati</h3><div class="mut" style="font-size:13px;margin-bottom:10px">Tutto resta nel telefono. Fai ogni tanto un backup (la chiave API non viene esportata).</div>' +
+  h += '<div class="card"><h3>Dati</h3><div class="mut" style="font-size:13px;margin-bottom:10px">Tutto resta nel telefono. Fai un backup una volta al mese (la chiave API non viene esportata).' +
+    (icuOn() ? ' Le sedute inviate e i dati di salute si recuperano comunque da Intervals.icu.' : '') +
+    '<br><span style="color:var(--t2)">Ultimo backup: ' + (S.lastBackup ? new Date(S.lastBackup).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }) : 'mai') + '</span></div>' +
     '<div class="row"><button class="btn" id="bExp">Esporta backup</button><button class="btn" id="bImp">Importa</button></div><input type="file" id="bFile" accept="application/json" hidden>' +
     '<button class="btn ghost sm full" id="bReset" style="margin-top:8px;color:var(--red)">Azzera tutto</button></div>' +
     '<div class="foot">SMG · Sudo Ma Godo · v1.0</div>';
@@ -702,11 +833,7 @@ function bindProfilo() {
     } catch (e) { toast('Ricerca non riuscita'); }
   };
   g('lFind').onclick = find; g('lQ').onkeydown = e => { if (e.key === 'Enter') find(); };
-  g('bExp').onclick = () => {
-    const data = JSON.parse(JSON.stringify(S)); data.icu.key = ''; data.icu.ok = false;
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
-    a.download = 'smg-backup-' + today() + '.json'; document.body.appendChild(a); a.click(); a.remove();
-  };
+  g('bExp').onclick = () => { exportBackup(); render(); };
   g('bImp').onclick = () => g('bFile').click();
   g('bFile').onchange = e => {
     const f = e.target.files[0]; if (!f) return; const r = new FileReader();

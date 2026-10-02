@@ -394,6 +394,21 @@ function baseline(checkins, date, key, days) {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
+// HRV: media degli ultimi 7 giorni confrontata con la norma personale (media e variabilità di 60 giorni)
+function hrvStatus(checkins, date) {
+  const val = d => { const c = checkins[d]; return c && c.hrv != null && c.hrv !== '' && !isNaN(+c.hrv) ? +c.hrv : null; };
+  const week = []; for (let i = 0; i < 7; i++) { const v = val(addDays(date, -i)); if (v != null) week.push(v); }
+  const base = []; for (let i = 1; i <= 60; i++) { const v = val(addDays(date, -i)); if (v != null) base.push(v); }
+  if (week.length < 3 || base.length < 14) return null;
+  const mean = base.reduce((a, b) => a + b, 0) / base.length;
+  const sd = Math.sqrt(base.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (base.length - 1));
+  const half = Math.max(0.75 * sd, mean * 0.04);
+  const w7 = week.reduce((a, b) => a + b, 0) / week.length;
+  const today = val(date);
+  return { week: w7, mean, lo: mean - half, hi: mean + half, status: w7 < mean - half ? 'low' : w7 > mean + half ? 'high' : 'ok',
+           dip: today != null && today < mean - 2 * sd, days: base.length };
+}
+
 function readiness(checkins, date) {
   const c = checkins[date];
   if (!c || !c.feel) return null;
@@ -402,7 +417,12 @@ function readiness(checkins, date) {
   s += (f - 3) * 10;
   if (f <= 2) why.push('ti senti stanco'); else if (f >= 4) why.push('ti senti bene');
 
-  if (c.hrv) {
+  const hs = c.hrv ? hrvStatus(checkins, date) : null;
+  if (hs) {
+    if (hs.status === 'low') { s -= 10; why.push('HRV della settimana sotto la tua norma'); }
+    else if (hs.status === 'high') { s += 2; }
+    if (hs.dip) { s -= 6; why.push('HRV di stanotte molto bassa'); }
+  } else if (c.hrv) {
     const b = baseline(checkins, date, 'hrv');
     if (b) {
       const r = c.hrv / b;
@@ -445,36 +465,60 @@ function readiness(checkins, date) {
 /* ------------------------------------------------------------------ */
 /* Contesto della settimana                                            */
 /* ------------------------------------------------------------------ */
-// livello di un giorno passato: dal piano (se fatto o pianificato) o dall'attività Intervals
-function dayInfo(state, d) {
-  const p = state.plans[d];
-  const acts = (state.activities || {})[d];
-  if (p && p.status !== 'skipped' && !p.rest) return { level: p.level, sport: p.sport, tid: p.tid, done: p.status === 'done' };
-  if (acts && acts.length) {
-    const lvl = Math.max(...acts.map(a => a.level || 2));
-    return { level: lvl, sport: acts[0].sport, tid: null, done: true };
+// Un giorno passato conta solo se c'è un'attività registrata (da Intervals) o se la seduta è stata segnata come fatta.
+// assume: data la cui seduta pianificata si considera fatta (per l'anteprima di domani).
+function dayInfo(state, d, assume) {
+  const p = state.plans[d]; const pv = p && !p.rest && p.tid ? p : null;
+  const acts = ((state.activities || {})[d] || []).filter(a => a.sport !== 'strength' && (a.min == null || a.min >= 15));
+  if (acts.length) {
+    const main = acts.slice().sort((a, b) => (b.level || 2) - (a.level || 2))[0];
+    const sp = main.sport === 'other' ? 'road' : main.sport;
+    const rated = acts.filter(a => a.rpe || a.feel);
+    return { level: Math.max(...acts.map(a => a.level || 2)), sport: sp, tid: pv && pv.status !== 'skipped' ? pv.tid : null, done: true,
+             rpe: rated.length ? rated[0].rpe || null : null, feel: rated.length ? rated[0].feel || null : null };
   }
+  if (pv && (pv.status === 'done' || d === assume)) return { level: pv.level, sport: pv.sport, tid: pv.tid, done: true, rpe: pv.rpe || null, feel: null };
   return null;
 }
 
-function context(state, date) {
+// fatica percepita: RPE (1-10) e sensazione (1 forte … 5 debole) delle ultime sedute, rispetto al previsto
+const RPE_EXP = { 1: 2.5, 2: 4, 3: 5.5, 4: 7, 5: 8 };
+function feedback(state, date, assume) {
+  const deltas = [], feels = [];
+  for (let k = 1; k <= 14 && (deltas.length < 4 || feels.length < 4); k++) {
+    const i = dayInfo(state, addDays(date, -k), assume); if (!i) continue;
+    if (i.rpe && deltas.length < 4) deltas.push(+i.rpe - RPE_EXP[i.level || 2]);
+    if (i.feel && feels.length < 4) feels.push(+i.feel);
+  }
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const d = deltas.length >= 2 ? avg(deltas) : null, f = feels.length >= 2 ? avg(feels) : null;
+  return { tired: (d != null && d >= 1.5) || (f != null && f >= 3.8), easy: (d != null && d <= -1.5) || (f != null && f <= 1.8), rpeDelta: d, feel: f };
+}
+
+function context(state, date, assume) {
   const mon = monday(date); const ctx = { weekHard: 0, blockHard: 0, runsWeek: 0, recent: [], yesterday: null, lastUse: {} };
   for (let d = mon; d < date; d = addDays(d, 1)) {
-    const i = dayInfo(state, d); if (!i) continue;
+    const i = dayInfo(state, d, assume); if (!i) continue;
     if (i.level >= 4) ctx.weekHard++;
     if (i.sport === 'run') ctx.runsWeek++;
     if (dow(d) === 5 || dow(d) === 6) if (i.level >= 4) ctx.blockHard++;
   }
   for (let k = 1; k <= 21; k++) {
-    const d = addDays(date, -k); const i = dayInfo(state, d);
+    const d = addDays(date, -k); const i = dayInfo(state, d, assume);
     if (k === 1) ctx.yesterday = i;
     if (k <= 3 && i) ctx.recent.push(i.sport);
     if (i && i.tid && ctx.lastUse[i.tid] == null) ctx.lastUse[i.tid] = k;
   }
-  ctx.twoAgo = dayInfo(state, addDays(date, -2));
+  ctx.twoAgo = dayInfo(state, addDays(date, -2), assume);
+  ctx.fb = feedback(state, date, assume);
   return ctx;
 }
 
+// settimana del blocco: 0, 1, 2 costruzione · 3 scarico
+function blockWeek(profile, date) {
+  const w = Math.floor(diffDays(monday(profile.start || date), monday(date)) / 7);
+  return ((w % 4) + 4) % 4;
+}
 // ogni quarta settimana dall'inizio è di scarico
 function isDeload(profile, date) {
   const w = Math.floor(diffDays(monday(profile.start || date), monday(date)) / 7);
@@ -541,8 +585,9 @@ function propose(state, date, opts) {
   const rd = readiness(state.checkins, date);
   const light = rd ? rd.light : 'green';
   const r = rng(hash(date + '|' + (opts.reroll || 0) + '|' + (opts.forceSport || '') + '|' + (opts.forceDur || '')));
-  const ctx = context(state, date);
+  const ctx = context(state, date, opts.assumeDone);
   const deload = isDeload(P, date);
+  const fb = ctx.fb;
   const reasons = [];
 
   if (rd) reasons.push(light === 'green' ? 'Semaforo verde: via libera' : light === 'yellow' ? 'Semaforo arancione: oggi si va di qualità leggera' : 'Semaforo rosso: oggi solo recupero');
@@ -559,6 +604,7 @@ function propose(state, date, opts) {
   else if (ctx.yesterday && ctx.yesterday.level === 3 && ctx.twoAgo && ctx.twoAgo.level >= 3) maxL = Math.min(maxL, 2);
   if (ctx.weekHard >= 2) { maxL = Math.min(maxL, 3); if (maxL === 3) reasons.push('Già due sedute dure questa settimana'); }
   if ((w === 6 || w === 0) && ctx.blockHard >= 1) maxL = Math.min(maxL, 3);
+  if (fb.tired && maxL > 3) { maxL = 3; reasons.push('Le ultime sedute ti sono sembrate più dure del previsto: oggi niente fuorigiri'); }
   if (opts.extra) maxL = Math.min(maxL, 2);
 
   /* --- intensità desiderata secondo il giorno --- */
@@ -632,7 +678,15 @@ function propose(state, date, opts) {
 
   /* --- durata --- */
   let [lo, hi] = durRange(tpl, sport, dayLong, dayMax, light, level, P);
-  let dur = round5(between(r, lo, hi));
+  // progressione: nelle 3 settimane di costruzione la durata (e quindi il numero di ripetute) sale di un gradino
+  const bw = blockWeek(P, date);
+  let step = deload ? 0 : bw + (fb.easy ? 1 : 0) - (fb.tired ? 1 : 0);
+  step = clamp(step, 0, 3);
+  const pos = between(r, step * 0.2, Math.min(1, 0.55 + step * 0.15));
+  let dur = round5(lo + (hi - lo) * pos);
+  if (!deload && bw > 0 && !tpl.test) reasons.push('Settimana ' + (bw + 1) + ' di 3 del blocco: un gradino in più');
+  if (fb.easy && !deload) reasons.push('Le ultime sedute ti sono sembrate facili: alziamo un po\' l\'asticella');
+  if (fb.tired) dur = round5(Math.max(tpl.dur[0], dur * 0.9));
   if (deload) dur = round5(Math.max(tpl.dur[0], dur * 0.75));
   if (opts.forceTid && tpl.id === opts.forceTid) reasons.push('Versione rulli della seduta di oggi');
   if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.max(opts.forceDur, 30) : opts.forceDur));
@@ -642,7 +696,7 @@ function propose(state, date, opts) {
   else if (bad === 1 && sport === 'indoor') reasons.push('Meteo incerto: rulli al riparo');
   if (tpl.test) reasons.push('Sono passate più di 7 settimane dall\'ultimo test: aggiorniamo le zone');
   if (level >= 4 && ctx.weekHard === 0) reasons.push('Prima seduta intensa della settimana');
-  if (dayLong && level <= 2) reasons.push('Giorno lungo: accumula ore di fondo');
+  if (dayLong && level === 2) reasons.push('Giorno lungo: accumula ore di fondo');
   if (winter && sport === 'mtb') reasons.push('Autunno/inverno: fuoristrada, come piace a te');
 
   const cPool = [].concat(
@@ -655,7 +709,7 @@ function propose(state, date, opts) {
   let extra = null;
   if (P.sports.strength && level <= 2 && !dayLong) extra = EXTRAS[Math.floor(r() * EXTRAS.length)].id;
 
-  return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload };
+  return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload, step };
 }
 
 /* ------------------------------------------------------------------ */
@@ -779,17 +833,30 @@ function activitySport(type) {
   if (type.includes('ride')) return 'road';
   return 'other';
 }
-function activityLevel(a) {
-  let IF = a.icu_intensity != null ? +a.icu_intensity : null;
+function activityLevel(a, P) {
+  const h = (a.moving_time || a.elapsed_time || 0) / 3600;
+  let IF = a.icu_intensity != null && +a.icu_intensity > 0 ? +a.icu_intensity : null;
   if (IF != null && IF > 3) IF = IF / 100;
-  if (IF == null) return 2;
-  return IF >= 0.9 ? 4 : IF >= 0.8 ? 3 : IF >= 0.6 ? 2 : 1;
+  // senza potenza: intensità stimata dal carico (che Intervals calcola dalla FC): carico/ora = 100 × IF²
+  if (IF == null && a.icu_training_load && h > 0.15) IF = Math.sqrt(a.icu_training_load / h / 100);
+  let lvl = IF == null ? 2 : IF >= 0.9 ? 4 : IF >= 0.8 ? 3 : IF >= 0.6 ? 2 : 1;
+  // tempo nelle zone cardio alte (zone Intervals: 4 = soglia, 5+ = sopra soglia)
+  const z = a.icu_hr_zone_times;
+  if (Array.isArray(z) && z.length >= 5) {
+    const z4 = +z[3] || 0, z5 = z.slice(4).reduce((x, y) => x + (+y || 0), 0);
+    if (z5 >= 360 || z4 + z5 >= 1200) lvl = Math.max(lvl, 4); else if (z4 + z5 >= 600) lvl = Math.max(lvl, 3);
+  }
+  if (a.average_heartrate && P && P.lthr && h >= 0.33) {
+    const r = a.average_heartrate / P.lthr;
+    if (r >= 0.92) lvl = Math.max(lvl, 4); else if (r >= 0.87) lvl = Math.max(lvl, 3);
+  }
+  return lvl;
 }
 
 root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
   defaultProfile, readiness, propose, indoorVersion, build, stats, profileBars, targetText,
-  toIcu, icuEvent, activitySport, activityLevel, isDeload, context
+  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback
 };
 })(typeof window !== 'undefined' ? window : globalThis);
