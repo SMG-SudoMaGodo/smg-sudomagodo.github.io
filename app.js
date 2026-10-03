@@ -116,7 +116,7 @@ function locate() {
   toast('Cerco la tua posizione…');
   navigator.geolocation.getCurrentPosition(async p => {
     S.loc = { lat: +p.coords.latitude.toFixed(3), lon: +p.coords.longitude.toFixed(3), name: 'Posizione attuale' };
-    save(); await fetchWeather(true); refreshToday(true); render();
+    save(); await fetchWeather(true); refreshToday(!(S.plans[today()] || {}).lightUsed); render();
   }, () => toast('Permesso posizione negato: cerca la località nel Profilo'), { timeout: 10000, maximumAge: 3600e3 });
 }
 async function searchPlace(q) {
@@ -269,11 +269,17 @@ function planFor(d, forceRegen) {
   const old = S.plans[d];
   const rd = E.readiness(S.checkins, d); const light = rd ? rd.light : null;
   if (old && (old.status === 'done' || old.status === 'skipped')) return old;
-  if (old && !forceRegen && old.lightUsed === light && old.v === ENGINE_V) return old;
+  if (old && !forceRegen) {
+    if (old.lightUsed) {                       // confermata col check-in: resta questa
+      old.newLight = light && light !== old.lightUsed ? light : null;   // segnala se i dati arrivati dopo cambiano il semaforo
+      return old;
+    }
+    if (old.lightUsed === light) return old;   // provvisoria e ancora senza check-in
+  }
   const opts = old && old.opts || {};
   const wx = wxFor(d);
   const np = E.propose(S, d, Object.assign({}, opts, { weather: wx }));
-  Object.assign(np, { opts, lightUsed: light, status: 'planned', v: ENGINE_V, wxUsed: !!wx,
+  Object.assign(np, { opts, lightUsed: light, newLight: null, status: 'planned', v: ENGINE_V, wxUsed: !!wx,
     pushed: old ? !!old.pushed : false, pushedSig: old ? old.pushedSig : null });
   S.plans[d] = np; save();
   return np;
@@ -476,6 +482,11 @@ function lightHTML(rd) {
     (why.length ? '<div class="why">' + why.map(w => '<span class="pill">' + esc(w) + '</span>').join('') + '</div>' : '') + '</div>';
 }
 
+function staleHTML(p) {
+  const nm = { green: 'verde', yellow: 'arancione', red: 'rosso' };
+  return '<div class="card" style="border-color:rgba(45,180,242,.45)"><h3>Sono arrivati dati nuovi</h3><div class="t2" style="font-size:14px">Dopo il check-in il semaforo è passato da ' + nm[p.lightUsed] + ' a <b style="color:var(--text)">' + nm[p.newLight] + '</b>. La seduta resta quella di prima finché non decidi tu.</div>' +
+    '<div class="row" style="margin-top:12px"><button class="btn hot" id="stUpd">Adegua la seduta</button><button class="btn" id="stKeep">Tieni questa</button></div></div>';
+}
 function restHTML(p) {
   const red = p.redRest;
   return '<div class="card rest"><div class="big">' + (red ? '🛋️' : '😌') + '</div><h2>' + (red ? 'Oggi riposo vero' : 'Giorno di riposo') + '</h2>' +
@@ -565,6 +576,7 @@ function renderOggi() {
   h += weatherHTML(d);
   if (!p.rest || !p.redRest) h += (rd && !editCI) ? lightHTML(rd) : checkinHTML(d);
   else h += lightHTML(rd);
+  if ((!p.rest || p.redRest) && p.status === 'planned' && p.newLight && p.newLight !== p.keptLight) h += staleHTML(p);
   h += p.rest ? restHTML(p) : workoutHTML(p);
   const exId = p.rest ? E.EXTRAS[E.hash(d) % E.EXTRAS.length].id : p.extra;
   if (S.profile.sports.strength && exId && (p.rest || p.level <= 2)) h += extraHTML(exId, d);
@@ -577,6 +589,8 @@ function bindOggi(p) {
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on('wClose', () => { S.welcome = false; save(); render(); });
   on('wxSet', () => go('profilo'));
+  on('stUpd', () => { const np = planFor(d, true); syncPushState(np); toast('Seduta adeguata al nuovo semaforo'); render(); });
+  on('stKeep', () => { const x = S.plans[d]; x.keptLight = x.newLight; save(); render(); });
   on('bkNow', () => { exportBackup(); render(); });
   on('bkLater', () => { S.backupSnooze = Date.now() + 7 * 86400e3; save(); render(); });
   document.querySelectorAll('[data-feel]').forEach(b => b.onclick = () => {
@@ -595,7 +609,8 @@ function bindOggi(p) {
     });
     c.pain = document.getElementById('ci_pain').checked;
     S.checkins[d] = c; leaveEdit(); save();
-    refreshToday(false); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    const cur = S.plans[d]; const nl = (E.readiness(S.checkins, d) || {}).light;
+    refreshToday(!!(cur && cur.status === 'planned' && cur.lightUsed && cur.lightUsed !== nl)); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   on('ciEdit', () => { editCI = true; history.pushState({ view: 'oggi', edit: 1 }, ''); render(); });
   on('ciCancel', () => { leaveEdit(); render(); });
@@ -840,7 +855,7 @@ function bindProfilo() {
     try {
       const res = await searchPlace(q);
       g('lRes').innerHTML = res.length ? res.map((r, i) => '<button data-i="' + i + '">' + esc(r.name) + '</button>').join('') : '<div class="mut" style="margin-top:8px">Nessun risultato</div>';
-      g('lRes').querySelectorAll('button').forEach(b => b.onclick = async () => { S.loc = res[+b.dataset.i]; save(); await fetchWeather(true); refreshToday(true); toast('Meteo di ' + S.loc.name); render(); });
+      g('lRes').querySelectorAll('button').forEach(b => b.onclick = async () => { S.loc = res[+b.dataset.i]; save(); await fetchWeather(true); refreshToday(!(S.plans[today()] || {}).lightUsed); toast('Meteo di ' + S.loc.name); render(); });
     } catch (e) { toast('Ricerca non riuscita'); }
   };
   g('lFind').onclick = find; g('lQ').onkeydown = e => { if (e.key === 'Enter') find(); };
@@ -883,7 +898,8 @@ const GUIDE = [
     <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
     <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola.</li>
     <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li></ul>
-    <p>Ogni modifica dopo l'invio sostituisce la seduta su Intervals, Garmin e MyWhoosh.</p>`],
+    <p>Ogni modifica dopo l'invio sostituisce la seduta su Intervals, Garmin e MyWhoosh.</p>
+    <p><b>Dopo il check-in la seduta non cambia più da sola</b>, nemmeno se chiudi e riapri l'app. Se arrivano dati nuovi che cambiano il semaforo (per esempio HRV e sonno sincronizzati in ritardo), compare un avviso: scegli tu se adeguare la seduta o tenere quella di prima.</p>`],
   ['brain', 'Come sceglie', `<ul><li>Il semaforo fissa quanto può essere dura.</li>
     <li>Massimo 2 sedute dure a settimana, mai due giorni duri di fila, una sola dura tra venerdì e domenica.</li>
     <li>Lunedì e mercoledì tendono alla qualità, venerdì al fondo, sabato o domenica alla seduta dura del blocco.</li>
@@ -973,7 +989,7 @@ async function boot() {
   render();
   const d = today(); const p = S.plans[d];
   const got = await fetchWeather(false);
-  if (got) { const q = S.plans[d]; if (q && q.status === 'planned' && !q.wxUsed && !(q.opts && Object.keys(q.opts).length)) refreshToday(true); render(); }
+  if (got) { const q = S.plans[d]; if (q && q.status === 'planned' && !q.lightUsed && !q.wxUsed && !(q.opts && Object.keys(q.opts).length)) refreshToday(true); render(); }
   if (icuOn() && Date.now() - (S.icu.last || 0) > 10 * 60e3) icuSync(true);
   void p;
 }
