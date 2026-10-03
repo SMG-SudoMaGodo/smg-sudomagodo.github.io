@@ -371,7 +371,8 @@ function workoutHTML(p, ro) {
     } else {
       h += p.status === 'done'
         ? '<div class="done-banner">' + ico('check') + '<div><b>Fatta! Sudato e goduto.</b><span>' + (p.via === 'icu' ? 'Rilevata da Intervals.icu' : 'Segnata a mano') + '</span></div></div>'
-        : '<div class="done-banner skip">' + ico('x') + '<div><b>Seduta saltata</b><span>Nessun problema: domani è un altro giro.</span></div></div>';
+        : '<div class="done-banner skip">' + ico('x') + '<div style="flex:1"><b>Seduta saltata</b><span>Nessun problema: le prossime sedute tengono conto che oggi non l\'hai fatta.</span></div></div>' +
+          (p.altExtra ? '' : '<button class="btn sm full" id="aAlt" style="margin-top:8px">' + ico('strength') + 'Proponimi qualcosa di breve</button>');
       h += '<button class="btn ghost sm full" id="aUndo" style="margin-top:8px">' + ico('undo') + 'Annulla</button>';
     }
   }
@@ -593,7 +594,8 @@ function renderOggi() {
   if ((!p.rest || p.redRest) && p.status === 'planned' && p.newLight && p.newLight !== p.keptLight) h += staleHTML(p);
   h += p.rest ? restHTML(p) : workoutHTML(p);
   const exId = p.rest ? E.EXTRAS[E.hash(d) % E.EXTRAS.length].id : p.extra;
-  if (S.profile.sports.strength && exId && (p.rest || p.level <= 2)) h += extraHTML(exId, d);
+  if (p.status === 'skipped' && p.altExtra) h += extraHTML(p.altExtra, d);
+  else if (p.status !== 'skipped' && S.profile.sports.strength && exId && (p.rest || p.level <= 2)) h += extraHTML(exId, d);
   $('#v-oggi').innerHTML = h;
   bindOggi(p);
 }
@@ -644,8 +646,17 @@ function bindOggi(p) {
   on('aIcuHow', () => openSheet('<h3 style="margin:0 0 8px;font-size:20px">Inviala a Fenix, Edge e MyWhoosh</h3><p class="t2">Collega Intervals.icu nel Profilo: da lì la seduta arriva da sola su Garmin Connect (e quindi su orologio e ciclocomputer) e nel calendario di MyWhoosh.</p><button class="btn hot full" id="goProf">Vai al Profilo</button>',
     () => { document.getElementById('goProf').onclick = () => { closeSheet('profilo'); }; }));
   on('aDone', () => { const x = S.plans[d]; x.status = 'done'; x.via = 'manual'; save(); toast('Grande! Sudato e goduto 💪'); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
-  on('aSkip', () => { const x = S.plans[d]; x.status = 'skipped'; if (x.pushed) { x.pushed = false; icuDelete(d); } save(); render(); });
-  on('aUndo', () => { const x = S.plans[d]; x.status = 'planned'; delete x.via; save(); render(); });
+  on('aSkip', () => {
+    const x = S.plans[d]; x.status = 'skipped'; delete x.altExtra;
+    if (x.pushed) { x.pushed = false; icuDelete(d); }
+    save(); render(); openSkipSheet(d);
+  });
+  on('aUndo', () => {
+    const x = S.plans[d]; const wasSkipped = x.status === 'skipped';
+    x.status = 'planned'; delete x.via; delete x.altExtra; save(); render();
+    if (wasSkipped && icuOn() && S.icu.auto && x.lightUsed) icuPush(x, true);   // torna anche su Garmin e MyWhoosh
+  });
+  on('aAlt', () => openSkipSheet(d));
   on('aExtraDay', () => { const x = S.plans[d]; x.opts = Object.assign({}, x.opts, { extra: true }); save(); const np = planFor(d, true); syncPushState(np); render(); });
   on('aExtra', e => { const id = e.currentTarget.dataset.x; S.extraDone[d] = S.extraDone[d] === id ? null : id; save(); render(); });
 }
@@ -917,7 +928,7 @@ const GUIDE = [
   ['bolt', 'La seduta del giorno', `<ul><li><b>Rilancia</b>: un'alternativa equivalente, se quella proposta non ti ispira.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
-    <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola.</li>
+    <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola. Con <b>Oggi salto</b> la seduta sparisce anche da Garmin e MyWhoosh, la settimana si riequilibra (una seduta dura saltata può tornare nei giorni dopo) e puoi scegliere un'alternativa breve di mobilità o forza leggera in base al tempo che hai. <b>Annulla</b> la rimette.</li>
     <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li></ul>
     <p>Ogni modifica dopo l'invio sostituisce la seduta su Intervals, Garmin e MyWhoosh.</p>
     <p><b>Dopo il check-in la seduta non cambia più da sola</b>, nemmeno se chiudi e riapri l'app. Se arrivano dati nuovi che cambiano il semaforo (per esempio HRV e sonno sincronizzati in ritardo), compare un avviso: scegli tu se adeguare la seduta o tenere quella di prima.</p>`],
@@ -960,6 +971,25 @@ function openGuide() {
     '<button class="btn full" id="guideClose" style="margin-top:14px">Chiudi</button></div>', () => { document.getElementById('guideClose').onclick = () => closeSheet(); });
 }
 $('#helpBtn').onclick = openGuide;
+// seduta saltata: alternativa breve senza fatica, in base al tempo che hai
+const ALT = [
+  ['mob_hips', 'Anche e schiena libere', 'Mobilità', 12, 'Scioglie anche e schiena, ideale dopo una giornata seduto.'],
+  ['mob_bike', 'Mobilità per ciclisti', 'Mobilità', 15, 'Allunga flessori, femorali e petto, i punti che la bici accorcia.'],
+  ['core', 'Core & stabilità', 'Forza leggera', 15, 'Addome e schiena: aiuta la posizione in sella e la schiena.'],
+  ['legs', 'Forza gambe a corpo libero', 'Forza', 20, 'Gambe e glutei senza attrezzi, poco stancante per il cuore.']
+];
+function openSkipSheet(d) {
+  const p = S.plans[d]; if (!p) return;
+  const rd = E.readiness(S.checkins, d);
+  const tired = rd && rd.light !== 'green';
+  const list = ALT.filter(a => !(tired && a[2] === 'Forza'));   // se sei stanco, niente forza vera
+  openSheet('<div class="guide"><h2>Ti va un\'alternativa breve?</h2><p class="intro">Niente fatica, solo qualcosa che fa bene' + (tired ? ' (oggi il semaforo non è verde: solo mobilità e core).' : '.') + ' Scegli in base al tempo che hai.</p>' +
+    list.map(a => '<button class="day" data-alt="' + a[0] + '"><div class="sporticon" style="background:#3FE0C524;color:#3FE0C5">' + ico('strength') + '</div><div class="info"><b>' + a[1] + '</b><small>' + a[2] + ' · ' + esc(a[4]) + '</small></div><span class="st plan">' + a[3] + "'</span></button>").join('') +
+    '<button class="btn full" id="altNone" style="margin-top:6px">No, oggi riposo</button></div>', () => {
+      document.querySelectorAll('[data-alt]').forEach(b => b.onclick = () => { p.altExtra = b.dataset.alt; save(); closeSheet(); render(); });
+      document.getElementById('altNone').onclick = () => { p.altExtra = null; save(); closeSheet(); render(); };
+    });
+}
 function openSheet(html, bind) {
   $('#sheetBody').innerHTML = html; $('#sheet').classList.add('on'); if (bind) bind();
   history.pushState({ view, sheet: 1 }, '');
