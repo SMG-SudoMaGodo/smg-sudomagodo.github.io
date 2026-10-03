@@ -477,7 +477,7 @@ function healthHTML(d) {
 function scoreDetail(rd) {
   if (!rd.parts) return '';
   const sg = n => n > 0 ? '+' + n : n < 0 ? '−' + Math.abs(n) : '0';
-  const row = (a, b, c, strong) => '<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line)' + (strong ? ';font-weight:700;color:var(--text)' : '') + '"><span style="flex:none;min-width:92px;color:var(--text)">' + a + '</span><span style="flex:1;min-width:0">' + b + '</span><b style="flex:none;color:' + (c > 0 ? 'var(--green)' : c < 0 ? 'var(--red)' : 'var(--mut)') + '">' + (typeof c === 'number' ? sg(c) : c) + '</b></div>';
+  const row = (a, b, c, strong) => '<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line)' + (strong ? ';font-weight:700;color:var(--text)' : '') + '"><span style="flex:none;min-width:92px;color:var(--text)">' + a + '</span><span style="flex:1;min-width:0">' + b + '</span><b style="flex:none;color:' + (typeof c !== 'number' ? 'var(--text)' : c > 0 ? 'var(--green)' : c < 0 ? 'var(--red)' : 'var(--mut)') + '">' + (typeof c === 'number' ? sg(c) : c) + '</b></div>';
   let h = row('Partenza', '', '70') + rd.parts.map(p => row(esc(p.lab), esc(p.val), p.pts)).join('');
   h += row('Punteggio tuo', 'limitato tra 5 e 100', String(rd.own), true);
   if (rd.garmin != null) h += row('Prontezza Garmin', 'media 50/50 con il tuo punteggio', String(rd.garmin)) + row('Totale', '(' + rd.own + ' + ' + rd.garmin + ') / 2', String(rd.score), true);
