@@ -375,7 +375,7 @@ function defaultProfile(today) {
     days: { 1: { on: true, max: 75 }, 2: { on: false, max: 60 }, 3: { on: true, max: 75 }, 4: { on: false, max: 60 },
             5: { on: true, max: 150, long: true }, 6: { on: true, max: 150, long: true }, 0: { on: true, max: 150, long: true } },
     lastTest: today,                   // ultimo test FTP (prossimo dopo ~7 settimane)
-    indoorMax: 90,
+    indoorMax: 70,
     start: today
   };
 }
@@ -531,6 +531,7 @@ function isDeload(profile, date) {
 function sportAllowed(profile, s) { return !!profile.sports[s]; }
 function templateOk(t, sport, profile, dayLong) {
   if (!t.sports.includes(sport)) return false;
+  if (sport === 'indoor' && t.dur[0] > (profile.indoorMax || 70)) return false;
   if (t.long && !dayLong) return false;
   if (sport === 'run') {
     const stg = profile.runStage || 1;
@@ -556,7 +557,7 @@ function durRange(t, sport, dayLong, dayMax, light, level, profile) {
     else if (level === 3) { lo = 90; hi = dayMax - 10; }
     else { lo = 75; hi = 105; }
   }
-  if (sport === 'indoor') hi = Math.min(hi, profile.indoorMax || 90);
+  if (sport === 'indoor') hi = Math.min(hi, profile.indoorMax || 70);
   hi = Math.min(hi, t.dur[1], dayMax); lo = Math.max(lo, t.dur[0]);
   if (lo > hi) lo = hi;
   return [lo, hi];
@@ -630,11 +631,20 @@ function propose(state, date, opts) {
   const cand = ['indoor', 'mtb', 'road', 'run'].filter(s => sportAllowed(P, s));
   const sportWeight = s => {
     let x = { indoor: 0.8, mtb: 1.0, road: 0.75, run: 0.9 }[s];
-    if (winter) { if (s === 'mtb') x *= 1.4; if (s === 'road') x *= 0.55; if (s === 'indoor' && !dayLong) x *= 1.3; }
-    else if (s === 'road') x *= 1.3;
-    if (level >= 4) { if (s === 'indoor') x *= 1.5; if (s === 'road') x *= 1.2; if (s === 'mtb') x *= 0.8; }
-    if (dayLong && s === 'indoor') x *= 0.45;
+    if (winter) {
+      // autunno/inverno: qualità sui rulli (a potenza, in ERG), volume fuori
+      if (s === 'mtb') x *= 1.4; if (s === 'road') x *= 0.55;
+      if (level >= 4) { if (s === 'indoor') x *= 4; if (s === 'mtb') x *= 0.05; if (s === 'road') x *= 0.3; }
+      else if (level <= 2 && dayLong && s === 'indoor') x *= 0.1;
+      else if (level === 3 && dayLong && s === 'indoor') x *= 0.5;
+      else if (s === 'indoor' && !dayLong) x *= 1.3;
+    } else {
+      if (s === 'road') x *= 1.3;
+      if (level >= 4) { if (s === 'indoor') x *= 1.5; if (s === 'road') x *= 1.2; if (s === 'mtb') x *= 0.8; }
+      if (dayLong && s === 'indoor') x *= 0.45;
+    }
     if (s !== 'indoor' && s !== 'run') { if (bad === 2) x *= 0.03; else if (bad === 1) x *= 0.45; }
+    if (s === 'indoor' && opts.forceDur && opts.forceDur > (P.indoorMax || 70)) x *= 0.1;   // più tempo del massimo sui rulli: meglio fuori
     if (s === 'run' && bad === 2) x *= 0.5;
     if (wx && wx.wind >= 40 && s === 'road') x *= 0.5;
     if (ctx.recent[0] === s) x *= 0.55;
@@ -689,7 +699,7 @@ function propose(state, date, opts) {
   if (fb.tired) dur = round5(Math.max(tpl.dur[0], dur * 0.9));
   if (deload) dur = round5(Math.max(tpl.dur[0], dur * 0.75));
   if (opts.forceTid && tpl.id === opts.forceTid) reasons.push('Versione rulli della seduta di oggi');
-  if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.max(opts.forceDur, 30) : opts.forceDur));
+  if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.min(Math.max(opts.forceDur, 30), P.indoorMax || 70) : opts.forceDur));
 
   /* --- motivi e sfida --- */
   if (bad === 2 && sport === 'indoor') reasons.push('Pioggia prevista: meglio i rulli');
@@ -698,6 +708,7 @@ function propose(state, date, opts) {
   if (level >= 4 && ctx.weekHard === 0) reasons.push('Prima seduta intensa della settimana');
   if (dayLong && level === 2) reasons.push('Giorno lungo: accumula ore di fondo');
   if (winter && sport === 'mtb') reasons.push('Autunno/inverno: fuoristrada, come piace a te');
+  if (winter && sport === 'indoor' && level >= 4) reasons.push('Autunno/inverno: la qualità si fa sui rulli, a potenza');
 
   const cPool = [].concat(
     tpl.challengeKey ? CHALLENGES[tpl.challengeKey] : [],
@@ -717,12 +728,13 @@ function propose(state, date, opts) {
 /* ------------------------------------------------------------------ */
 const INDOOR_EQ = { explorer: 'end_steady', hilly_long: 'end_steady', free_ride: 'end_cad', tempo_climbs: 'tempo_blocks',
   fartlek: 'tempo_blocks', thr_climbs: 'threshold', hill_hunt: 'vo2_3' };
-function indoorVersion(plan) {
+function indoorVersion(plan, profile) {
   const t = TEMPLATES[plan.tid];
   const tid = t.sports.includes('indoor') ? t.id : INDOOR_EQ[t.id] || null;
   if (!tid) return null;
   const tpl = TEMPLATES[tid];
-  return { tid, same: tid === t.id, name: tpl.name, dur: Math.max(tpl.dur[0], Math.min(plan.dur, 120)) };
+  const cap = (profile && profile.indoorMax) || 70;
+  return { tid, same: tid === t.id, name: tpl.name, dur: Math.max(tpl.dur[0], Math.min(plan.dur, cap)) };
 }
 
 /* ------------------------------------------------------------------ */

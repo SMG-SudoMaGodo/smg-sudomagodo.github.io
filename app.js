@@ -24,6 +24,7 @@ function load() {
   return fresh();
 }
 let S = load();
+if (S.profile && (S.profile.indoorMax == null || S.profile.indoorMax === 90) && !S.profile.indoorMaxSet) S.profile.indoorMax = 70;
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
 let view = 'oggi', weekOff = 0, editCI = false, busy = {};
@@ -351,14 +352,14 @@ function workoutHTML(p, ro) {
   if (!ro) {
     if (p.status === 'planned') {
       const dayCfg = S.profile.days[E.dow(p.date)] || {};
-      const maxD = p.opts && p.opts.extra ? 60 : (dayCfg.max || 75);
+      const maxD = Math.min(p.opts && p.opts.extra ? 60 : (dayCfg.max || 75), p.sport === 'indoor' ? (S.profile.indoorMax || 70) : 999);
       const sports = ['indoor', 'mtb', 'road', 'run'].filter(s => S.profile.sports[s]);
       const fs = p.opts && p.opts.forceSport, fd = p.opts && p.opts.forceDur;
       h += '<div class="ctl"><div class="lab">Sport</div><div class="chips"><button class="chip' + (!fs ? ' on' : '') + '" data-sport="">Automatico</button>' +
         sports.map(s => '<button class="chip' + (fs === s ? ' on' : '') + '" data-sport="' + s + '">' + E.SPORTS[s].name + '</button>').join('') + '</div>' +
         '<div class="lab">Tempo a disposizione</div><div class="chips"><button class="chip' + (!fd ? ' on' : '') + '" data-dur="">Automatico</button>' +
         [30, 45, 60, 75, 90, 105, 120, 150].filter(m => m <= maxD).map(m => '<button class="chip' + (fd === m ? ' on' : '') + '" data-dur="' + m + '">' + fmtMin(m) + '</button>').join('') + '</div></div>';
-      const iv = p.sport !== 'indoor' && p.sport !== 'run' && S.profile.sports.indoor ? E.indoorVersion(p) : null;
+      const iv = p.sport !== 'indoor' && p.sport !== 'run' && S.profile.sports.indoor ? E.indoorVersion(p, S.profile) : null;
       h += '<div class="actions">' +
         (iv ? '<button class="btn wide" id="aIndoor"><span style="color:var(--indoor);display:flex">' + ico('indoor') + '</span>' + 'Falla sui rulli</button>' : '') +
         '<button class="btn" id="aReroll">' + ico('dice') + 'Rilancia</button>' +
@@ -633,7 +634,7 @@ function bindOggi(p) {
   document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts(o => { o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.reroll = 0; o.exclude = []; }));
   document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => setOpts(o => { o.forceDur = b.dataset.dur ? +b.dataset.dur : undefined; }));
   on('aIndoor', () => {
-    const pp = S.plans[d]; const iv = E.indoorVersion(pp); if (!iv) return;
+    const pp = S.plans[d]; const iv = E.indoorVersion(pp, S.profile); if (!iv) return;
     const from = E.TEMPLATES[pp.tid].name;
     setOpts(o => { o.forceSport = 'indoor'; o.forceTid = iv.tid; o.forceDur = iv.dur; o.exclude = []; });
     toast(iv.same ? from + ': versione rulli pronta' : from + ' → ' + iv.name + ' sui rulli');
@@ -811,7 +812,9 @@ function renderProfilo() {
     return '<div class="dayset"><b>' + cap(GG[g].slice(0, 3)) + '</b>' + sw('d_on_' + g, c.on) +
       '<select id="d_type_' + g + '"' + (c.on ? '' : ' class="off"') + '><option value="0"' + (!c.long ? ' selected' : '') + '>Normale</option><option value="1"' + (c.long ? ' selected' : '') + '>Lungo</option></select>' +
       '<select id="d_max_' + g + '"' + (c.on ? '' : ' class="off"') + '>' + [45, 60, 75, 90, 105, 120, 150, 180].map(m => '<option value="' + m + '"' + (c.max === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div>';
-  }).join('') + '<div class="mut" style="font-size:12.5px;margin-top:8px">Durata massima per giorno. Ogni quarta settimana è di scarico.</div></div>';
+  }).join('') + '<div class="mut" style="font-size:12.5px;margin-top:8px">Durata massima per giorno. Ogni quarta settimana è di scarico.</div>' +
+    '<div class="set" style="margin-top:6px;border-top:1px solid var(--line)"><div class="l"><b>Massimo sui rulli</b><small>Vale per tutte le sedute indoor</small></div><div class="v"><select id="pIndoorMax">' +
+    [45, 60, 70, 75, 90, 105, 120].map(m => '<option value="' + m + '"' + ((P.indoorMax || 70) === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div></div></div>';
 
   const st = S.icu.ok ? '<div class="status ok"><i></i>Collegato' + (S.icu.name ? ' · ' + esc(S.icu.name) : '') + '</div>' : S.icu.key ? '<div class="status err"><i></i>Non collegato</div>' : '<div class="status"><i></i>Non collegato</div>';
   h += '<div class="card"><h3>Intervals.icu → Garmin e MyWhoosh</h3>' + st +
@@ -865,6 +868,7 @@ function bindProfilo() {
   if (g('iSync')) g('iSync').onclick = () => icuSync(false);
   if (g('iOff')) g('iOff').onclick = () => { S.icu = { key: '', athlete: '0', auto: S.icu.auto, name: '', last: 0, ok: false }; save(); render(); };
   g('lHere').onclick = locate;
+  g('pIndoorMax').onchange = e => { P.indoorMax = +e.target.value; P.indoorMaxSet = true; changed(); };
   g('guideOpen').onclick = openGuide;
   const find = async () => {
     const q = g('lQ').value.trim(); if (q.length < 2) return;
@@ -920,7 +924,8 @@ const GUIDE = [
   ['brain', 'Come sceglie', `<ul><li>Il semaforo fissa quanto può essere dura.</li>
     <li>Massimo 2 sedute dure a settimana, mai due giorni duri di fila, una sola dura tra venerdì e domenica.</li>
     <li>Lunedì e mercoledì tendono alla qualità, venerdì al fondo, sabato o domenica alla seduta dura del blocco.</li>
-    <li>Sport: in autunno e inverno preferisce la MTB; le sedute dure vanno su rulli o strada; con la pioggia rulli.</li>
+    <li>Sport, da ottobre a marzo: <b>qualità sui rulli</b> (sedute dure a potenza, in ERG) e <b>volume fuori</b> (fondo e lunghi in MTB/gravel, rulli solo se piove). Da aprile a settembre più spazio alla strada e meno ai rulli.</li>
+    <li>Sui rulli al massimo 70 minuti (si cambia nel Profilo, sotto "La tua settimana").</li>
     <li>Evita le sedute fatte di recente e lo sport di ieri. Ogni 7 settimane propone il test FTP.</li>
     <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
     <p>Le etichette sotto la seduta spiegano il perché della scelta.</p>`],
