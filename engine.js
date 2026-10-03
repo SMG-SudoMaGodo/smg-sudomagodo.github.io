@@ -412,54 +412,64 @@ function hrvStatus(checkins, date) {
 function readiness(checkins, date) {
   const c = checkins[date];
   if (!c || !c.feel) return null;
-  let s = 70; const why = [];
+  let s = 70; const why = [], parts = [];
+  const add = (lab, val, pts) => { s += pts; parts.push({ lab, val, pts }); };
+  const r1 = v => Math.round(v * 10) / 10;
   const f = +c.feel;
-  s += (f - 3) * 10;
+  add('Sensazione', ['A pezzi', 'Stanco', 'Normale', 'Bene', 'Al top'][f - 1], (f - 3) * 10);
   if (f <= 2) why.push('ti senti stanco'); else if (f >= 4) why.push('ti senti bene');
 
   const hs = c.hrv ? hrvStatus(checkins, date) : null;
   if (hs) {
-    if (hs.status === 'low') { s -= 10; why.push('HRV della settimana sotto la tua norma'); }
-    else if (hs.status === 'high') { s += 2; }
-    if (hs.dip) { s -= 6; why.push('HRV di stanotte molto bassa'); }
+    let pts = 0;
+    if (hs.status === 'low') { pts -= 10; why.push('HRV della settimana sotto la tua norma'); }
+    else if (hs.status === 'high') pts += 2;
+    if (hs.dip) { pts -= 6; why.push('HRV di stanotte molto bassa'); }
+    add('HRV', c.hrv + ' ms, media 7 gg ' + Math.round(hs.week) + ' (norma ' + Math.round(hs.lo) + '–' + Math.round(hs.hi) + ')', pts);
   } else if (c.hrv) {
-    const b = baseline(checkins, date, 'hrv');
+    const b = baseline(checkins, date, 'hrv'); let pts = 0;
     if (b) {
       const r = c.hrv / b;
-      if (r < 0.85) { s -= 15; why.push('HRV molto sotto la tua media'); }
-      else if (r < 0.93) { s -= 7; why.push('HRV un po\' sotto la media'); }
-      else if (r > 1.05) { s += 4; why.push('HRV sopra la media'); }
+      if (r < 0.85) { pts = -15; why.push('HRV molto sotto la tua media'); }
+      else if (r < 0.93) { pts = -7; why.push('HRV un po\' sotto la media'); }
+      else if (r > 1.05) { pts = 4; why.push('HRV sopra la media'); }
     }
+    add('HRV', c.hrv + ' ms' + (b ? ' (media ' + Math.round(b) + ')' : ' (media in arrivo)'), pts);
   }
   if (c.rhr) {
-    const b = baseline(checkins, date, 'rhr');
+    const b = baseline(checkins, date, 'rhr'); let pts = 0;
     if (b) {
       const d = c.rhr - b;
-      if (d >= 5) { s -= 12; why.push('FC a riposo alta'); }
-      else if (d >= 3) { s -= 6; why.push('FC a riposo un po\' alta'); }
-      else if (d <= -2) { s += 3; }
+      if (d >= 5) { pts = -12; why.push('FC a riposo alta'); }
+      else if (d >= 3) { pts = -6; why.push('FC a riposo un po\' alta'); }
+      else if (d <= -2) pts = 3;
     }
+    add('FC a riposo', c.rhr + ' bpm' + (b ? ' (media ' + r1(b) + ')' : ' (media in arrivo)'), pts);
   }
   if (c.sleep) {
-    const v = +c.sleep;
-    if (v < 50) { s -= 12; why.push('sonno scarso'); }
-    else if (v < 65) { s -= 6; why.push('sonno così così'); }
-    else if (v >= 80) { s += 5; why.push('dormito bene'); }
+    const v = +c.sleep; let pts = 0;
+    if (v < 50) { pts = -12; why.push('sonno scarso'); }
+    else if (v < 65) { pts = -6; why.push('sonno così così'); }
+    else if (v >= 80) { pts = 5; why.push('dormito bene'); }
+    add('Sonno', v + '/100', pts);
   } else if (c.sleepH) {
-    const h = +c.sleepH;
-    if (h < 6) { s -= 10; why.push('poche ore di sonno'); } else if (h < 7) s -= 4; else if (h >= 8) s += 4;
+    const h = +c.sleepH; let pts = 0;
+    if (h < 6) { pts = -10; why.push('poche ore di sonno'); } else if (h < 7) pts = -4; else if (h >= 8) pts = 4;
+    add('Sonno', String(r1(h)).replace('.', ',') + ' ore', pts);
   }
   if (c.tsb != null && c.tsb !== '') {
-    const t = +c.tsb;
-    if (t < -25) { s -= 10; why.push('molta fatica accumulata'); } else if (t < -15) { s -= 5; why.push('un po\' di fatica accumulata'); } else if (t > 5) s += 3;
+    const t = +c.tsb; let pts = 0;
+    if (t < -25) { pts = -10; why.push('molta fatica accumulata'); } else if (t < -15) { pts = -5; why.push('un po\' di fatica accumulata'); } else if (t > 5) pts = 3;
+    add('Forma', (t > 0 ? '+' : '') + t, pts);
   }
-  if (c.pain) { s -= 15; why.push('qualche dolore'); }
+  if (c.pain) { add('Dolori', 'sì', -15); why.push('qualche dolore'); }
   s = clamp(Math.round(s), 5, 100);
-  if (c.garmin) {                                   // Prontezza Garmin, se inserita
+  const own = s;
+  if (c.garmin) {                                   // Prontezza Garmin, se inserita: media 50/50
     s = Math.round((s + clamp(+c.garmin, 0, 100)) / 2);
   }
   const light = s >= 70 ? 'green' : s >= 50 ? 'yellow' : 'red';
-  return { score: s, light, why };
+  return { score: s, light, why, parts, own, garmin: c.garmin ? +c.garmin : null };
 }
 
 /* ------------------------------------------------------------------ */

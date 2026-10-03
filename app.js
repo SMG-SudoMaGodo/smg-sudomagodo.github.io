@@ -473,6 +473,17 @@ function healthHTML(d) {
   const html = tiles.filter(Boolean);
   return html.length ? '<div class="hm">' + html.join('') + '</div>' : '';
 }
+// come è calcolato il punteggio, voce per voce
+function scoreDetail(rd) {
+  if (!rd.parts) return '';
+  const sg = n => n > 0 ? '+' + n : n < 0 ? '−' + Math.abs(n) : '0';
+  const row = (a, b, c, strong) => '<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line)' + (strong ? ';font-weight:700;color:var(--text)' : '') + '"><span style="flex:none;min-width:92px;color:var(--text)">' + a + '</span><span style="flex:1;min-width:0">' + b + '</span><b style="flex:none;color:' + (c > 0 ? 'var(--green)' : c < 0 ? 'var(--red)' : 'var(--mut)') + '">' + (typeof c === 'number' ? sg(c) : c) + '</b></div>';
+  let h = row('Partenza', '', '70') + rd.parts.map(p => row(esc(p.lab), esc(p.val), p.pts)).join('');
+  h += row('Punteggio tuo', 'limitato tra 5 e 100', String(rd.own), true);
+  if (rd.garmin != null) h += row('Prontezza Garmin', 'media 50/50 con il tuo punteggio', String(rd.garmin)) + row('Totale', '(' + rd.own + ' + ' + rd.garmin + ') / 2', String(rd.score), true);
+  return '<details class="steps" style="margin-top:12px"><summary>Come è calcolato il punteggio ' + ico('chev') + '</summary><div class="t2" style="font-size:13px">' + h +
+    '<div class="mut" style="font-size:12px;margin-top:6px">Verde da 70, arancione da 50, rosso sotto 50. Vicino a una soglia basta un piccolo cambiamento (per esempio la FC a riposo aggiornata da Garmin in giornata) per cambiare colore.</div></div></details>';
+}
 function lightHTML(rd) {
   const snap = (S.checkins[today()] || {}).snap;
   const msg = { green: ['Via libera', 'Gambe pronte: oggi si può spingere.'], yellow: ['Con giudizio', 'Si lavora, ma senza esagerare.'], red: ['Recupero', 'Oggi il corpo chiede di rallentare.'] }[rd.light];
@@ -482,7 +493,7 @@ function lightHTML(rd) {
   return '<div class="card"><div class="light">' + trafficSVG(rd.light) +
     '<div style="flex:1;min-width:0"><div class="score num" style="color:' + LCOL[rd.light] + '">' + rd.score + '<small>/100</small></div><h2>' + msg[0] + '</h2><p>' + msg[1] + '</p>' +
     (snap && snap.score != null && snap.score !== rd.score ? '<p class="mut" style="font-size:12.5px;margin-top:4px">Al check-in delle ' + new Date(snap.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + ': ' + snap.score + '/100' + (snapDiff(today()).length ? ' · ' + esc(snapDiff(today()).join(', ')) : '') + '</p>' : '') + '</div>' +
-    '<button class="btn sm edit" id="ciEdit">Modifica</button></div>' + hm +
+    '<button class="btn sm edit" id="ciEdit">Modifica</button></div>' + hm + scoreDetail(rd) +
     (why.length ? '<div class="why">' + why.map(w => '<span class="pill">' + esc(w) + '</span>').join('') + '</div>' : '') + '</div>';
 }
 
@@ -924,7 +935,7 @@ const GUIDE = [
     <li><b>Sonno</b>: il punteggio del Fenix; sotto 65 pesa sul semaforo.</li>
     <li><b>Forma</b>: fitness meno fatica, da Intervals. La linea tratteggiata è lo zero: sopra sei fresco, molto sotto hai carico accumulato.</li></ul>
     <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>
-    <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati.</p>`],
+    <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati. In <b>Come è calcolato il punteggio</b> trovi il contributo di ogni voce.</p>`],
   ['bolt', 'La seduta del giorno', `<ul><li><b>Rilancia</b>: un'alternativa equivalente, se quella proposta non ti ispira.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
