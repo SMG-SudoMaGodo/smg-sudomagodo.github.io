@@ -472,19 +472,32 @@ function healthHTML(d) {
   return html.length ? '<div class="hm">' + html.join('') + '</div>' : '';
 }
 function lightHTML(rd) {
+  const snap = (S.checkins[today()] || {}).snap;
   const msg = { green: ['Via libera', 'Gambe pronte: oggi si può spingere.'], yellow: ['Con giudizio', 'Si lavora, ma senza esagerare.'], red: ['Recupero', 'Oggi il corpo chiede di rallentare.'] }[rd.light];
   const hm = healthHTML(today());
   // i motivi già visibili nei riquadri non si ripetono
   const why = hm ? rd.why.filter(w => !/HRV|FC a riposo|sonno|dormito/i.test(w)) : rd.why;
   return '<div class="card"><div class="light">' + trafficSVG(rd.light) +
-    '<div style="flex:1;min-width:0"><div class="score num" style="color:' + LCOL[rd.light] + '">' + rd.score + '<small>/100</small></div><h2>' + msg[0] + '</h2><p>' + msg[1] + '</p></div>' +
+    '<div style="flex:1;min-width:0"><div class="score num" style="color:' + LCOL[rd.light] + '">' + rd.score + '<small>/100</small></div><h2>' + msg[0] + '</h2><p>' + msg[1] + '</p>' +
+    (snap && snap.score != null && snap.score !== rd.score ? '<p class="mut" style="font-size:12.5px;margin-top:4px">Al check-in delle ' + new Date(snap.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + ': ' + snap.score + '/100' + (snapDiff(today()).length ? ' · ' + esc(snapDiff(today()).join(', ')) : '') + '</p>' : '') + '</div>' +
     '<button class="btn sm edit" id="ciEdit">Modifica</button></div>' + hm +
     (why.length ? '<div class="why">' + why.map(w => '<span class="pill">' + esc(w) + '</span>').join('') + '</div>' : '') + '</div>';
 }
 
+const SNAPK = ['hrv', 'rhr', 'sleep', 'sleepH', 'tsb', 'garmin', 'feel'];
+const SNAPL = { hrv: ['HRV', ' ms'], rhr: ['FC a riposo', ' bpm'], sleep: ['Punteggio sonno', ''], sleepH: ['Ore di sonno', ' h'], tsb: ['Forma', ''], garmin: ['Prontezza Garmin', ''], feel: ['Sensazione', '/5'] };
+// cosa è cambiato rispetto al check-in
+function snapDiff(d) {
+  const c = S.checkins[d]; if (!c || !c.snap) return [];
+  const f = v => v == null ? '—' : String(Math.round(v * 10) / 10).replace('.', ',');
+  return SNAPK.filter(k => { const a = c.snap[k], b = c[k] == null || c[k] === '' ? null : +c[k]; return a == null ? b != null : b == null || Math.abs(a - b) >= 0.1; })
+    .map(k => SNAPL[k][0] + ': ' + f(c.snap[k]) + ' → ' + f(c[k] === '' ? null : c[k]) + (c[k] != null && c[k] !== '' ? SNAPL[k][1] : '') + (c.snap[k] == null ? ' (arrivato dopo)' : ''));
+}
 function staleHTML(p) {
   const nm = { green: 'verde', yellow: 'arancione', red: 'rosso' };
+  const diffs = snapDiff(p.date);
   return '<div class="card" style="border-color:rgba(45,180,242,.45)"><h3>Sono arrivati dati nuovi</h3><div class="t2" style="font-size:14px">Dopo il check-in il semaforo è passato da ' + nm[p.lightUsed] + ' a <b style="color:var(--text)">' + nm[p.newLight] + '</b>. La seduta resta quella di prima finché non decidi tu.</div>' +
+    (diffs.length ? '<div class="t2" style="font-size:13.5px;margin-top:10px"><b style="color:var(--text)">Cosa è cambiato</b><ul style="margin:4px 0 0;padding-left:18px">' + diffs.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '') +
     '<div class="row" style="margin-top:12px"><button class="btn hot" id="stUpd">Adegua la seduta</button><button class="btn" id="stKeep">Tieni questa</button></div></div>';
 }
 function restHTML(p) {
@@ -608,6 +621,9 @@ function bindOggi(p) {
       c[k] = n == null || isNaN(n) ? null : n;
     });
     c.pain = document.getElementById('ci_pain').checked;
+    const r0 = E.readiness(Object.assign({}, S.checkins, { [d]: c }), d) || {};
+    c.snap = { at: Date.now(), score: r0.score, light: r0.light };
+    SNAPK.forEach(k => { c.snap[k] = c[k] == null || c[k] === '' ? null : +c[k]; });
     S.checkins[d] = c; leaveEdit(); save();
     const cur = S.plans[d]; const nl = (E.readiness(S.checkins, d) || {}).light;
     refreshToday(!!(cur && cur.status === 'planned' && cur.lightUsed && cur.lightUsed !== nl)); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -892,7 +908,8 @@ const GUIDE = [
     <li><b>FC a riposo</b>: più bassa è meglio. Qualche battito sopra il solito è un segnale di stanchezza o di malanno in arrivo.</li>
     <li><b>Sonno</b>: il punteggio del Fenix; sotto 65 pesa sul semaforo.</li>
     <li><b>Forma</b>: fitness meno fatica, da Intervals. La linea tratteggiata è lo zero: sopra sei fresco, molto sotto hai carico accumulato.</li></ul>
-    <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>`],
+    <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>
+    <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati.</p>`],
   ['bolt', 'La seduta del giorno', `<ul><li><b>Rilancia</b>: un'alternativa equivalente, se quella proposta non ti ispira.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
