@@ -190,7 +190,7 @@ async function icuSync(quiet) {
     const withData = (well || []).filter(w => has(w).length);
     const lastW = withData.map(w => w.id).sort().pop() || null;
     const todayW = (well || []).find(w => w.id === t);
-    S.icu.diag = { days: withData.length, last: lastW, today: todayW ? has(todayW) : [], err: null };
+    S.icu.diag = { days: withData.length, first: withData.map(w => w.id).sort()[0] || null, last: lastW, today: todayW ? has(todayW) : [], err: null };
     (well || []).forEach(w => {
       const d = w.id; if (!d) return;
       const c = S.checkins[d] || (S.checkins[d] = {}); c.src = c.src || {};
@@ -855,7 +855,8 @@ function diagText() {
   if (g.err) return 'Ultimo tentativo non riuscito (' + g.err + ')';
   if (!g.days) return 'Intervals.icu non ha dati di sonno o HRV negli ultimi 28 giorni: controlla che su Intervals sia attivo lo scaricamento dei dati di benessere da Garmin';
   if (!g.today.length) return 'Dati di benessere ricevuti per ' + g.days + ' giorni, ma per oggi ancora niente (ultimo: ' + longDate(g.last) + ')';
-  return 'Oggi da Intervals: ' + g.today.map(k => WNAME[k]).join(', ');
+  const old = g.first ? ' Storico: ' + g.days + ' giorni con dati, dal ' + longDate(g.first).replace(/^\S+ /, '') + '.' : ' Storico: ' + g.days + ' giorni con dati.';
+  return 'Oggi da Intervals: ' + g.today.map(k => WNAME[k]).join(', ') + '.' + old;
 }
 function diagHTML() { const t = diagText(); return t ? '<div class="help" style="margin-top:8px">' + esc(t) + '</div>' : ''; }
 function blockCardHTML() {
