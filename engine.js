@@ -530,14 +530,20 @@ function context(state, date, assume) {
 }
 
 // settimana del blocco: 0, 1, 2 costruzione · 3 scarico
+// Blocchi di 4 settimane ancorati alla data di uno scarico (deloadAnchor, lunedì).
+// Prima dell'ancora: settimane di costruzione che portano allo scarico; dall'ancora in poi il ciclo si ripete.
+function deloadAnchor(profile) { return profile.deloadAnchor || addDays(monday(profile.start || ymd(new Date())), 21); }
 function blockWeek(profile, date) {
-  const w = Math.floor(diffDays(monday(profile.start || date), monday(date)) / 7);
-  return ((w % 4) + 4) % 4;
+  const w = Math.round(diffDays(deloadAnchor(profile), monday(date)) / 7);
+  if (w >= 0) { const i = w % 4; return i === 0 ? 3 : i - 1; }
+  return Math.max(0, 3 + w);
 }
-// ogni quarta settimana dall'inizio è di scarico
-function isDeload(profile, date) {
-  const w = Math.floor(diffDays(monday(profile.start || date), monday(date)) / 7);
-  return w >= 0 && w % 4 === 3;
+// la quarta settimana del blocco è di scarico
+function isDeload(profile, date) { return blockWeek(profile, date) === 3; }
+function nextDeload(profile, date) {
+  let m = monday(date);
+  for (let i = 0; i < 5; i++) { if (blockWeek(profile, m) === 3) return m; m = addDays(m, 7); }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -885,6 +891,6 @@ root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
   defaultProfile, readiness, propose, indoorVersion, build, stats, profileBars, targetText,
-  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback
+  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload
 };
 })(typeof window !== 'undefined' ? window : globalThis);

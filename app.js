@@ -572,6 +572,42 @@ function weatherHTML(d) {
   return '<div class="card wxc"><div class="days">' + wxDayHTML(d, 'Oggi', '') + wxDayHTML(t, 'Domani, ' + GG[E.parse(t).getDay()], 'tmw') + '</div>' + planLine(d) + '</div>';
 }
 
+// riepilogo della settimana appena chiusa: compare lunedì e martedì finché non lo chiudi
+function weekStats(mon) {
+  let n = 0, min = 0, load = 0, hard = 0;
+  for (let i = 0; i < 7; i++) { const dn = dayDone(E.addDays(mon, i)); if (dn) { n++; min += dn.min; load += dn.load || 0; if (dn.level >= 4) hard++; } }
+  return { n, min, load: Math.round(load), hard };
+}
+function recapDue() {
+  const t = today(), w = E.dow(t), mon = E.monday(t);
+  if (w !== 1 && w !== 2) return false;
+  if (S.recapSeen === mon) return false;
+  const prev = E.addDays(mon, -7);
+  return Object.keys(S.plans).some(d => d >= prev && d < mon) || Object.keys(S.activities || {}).some(d => d >= prev && d < mon);
+}
+function recapHTML() {
+  const mon = E.monday(today()), prev = E.addDays(mon, -7), sun = E.addDays(mon, -1);
+  const a = weekStats(prev), b = weekStats(E.addDays(prev, -7));
+  const fit = d => { const v = S.fit && S.fit[d]; return v ? v[0] : null; };
+  let f1 = null, f0 = null; for (let k = 0; k < 3 && f1 == null; k++) f1 = fit(E.addDays(sun, -k)); for (let k = 0; k < 3 && f0 == null; k++) f0 = fit(E.addDays(sun, -7 - k));
+  const dFit = f1 != null && f0 != null ? Math.round(f1 - f0) : null;
+  const notes = [];
+  if (a.n === 0) notes.push('Settimana a riposo: capita, si riparte da qui.');
+  else if (a.n < 3) notes.push('Settimana leggera: va bene così, l\'importante è la costanza nel tempo.');
+  else if (a.hard >= 2) notes.push('Due sedute di qualità e il resto di fondo: settimana fatta bene.');
+  else if (a.hard === 0) notes.push('Nessuna seduta di qualità: questa settimana ne trovi.');
+  else notes.push('Settimana regolare: ' + a.n + ' sedute, ' + a.hard + ' di qualità.');
+  if (dFit != null) notes.push(dFit > 0 ? 'Fitness in crescita (+' + dFit + ').' : dFit < 0 ? 'Fitness in calo (' + dFit + '): normale dopo una settimana leggera o di scarico.' : 'Fitness stabile.');
+  const bw = E.blockWeek(S.profile, mon);
+  const next = bw === 3 ? 'Questa settimana è di <b>scarico</b>: sedute più corte e leggere, per assorbire il lavoro fatto.' : 'Questa settimana: <b>costruzione ' + (bw + 1) + '/3</b>' + (bw === 0 ? ', si riparte dopo lo scarico.' : ', un gradino in più.') ;
+  const z = E.parse(prev), y = E.parse(sun);
+  const range = z.getDate() + (z.getMonth() !== y.getMonth() ? ' ' + MM[z.getMonth()].slice(0, 3) : '') + '–' + y.getDate() + ' ' + MM[y.getMonth()].slice(0, 3);
+  const cmp = (x, y2) => y2 == null || x === y2 ? '' : '<small style="display:block;color:' + (x > y2 ? 'var(--green)' : 'var(--mut)') + ';font-size:11px">' + (x > y2 ? '▲' : '▼') + ' vs prima</small>';
+  return '<div class="card" style="border-color:rgba(45,180,242,.4)"><h3>La tua settimana, ' + range + '<span class="sp"></span><button class="btn ghost sm" id="rcClose" style="padding:0 4px">' + ico('x') + '</button></h3>' +
+    '<div class="tiles" style="margin-bottom:10px"><div class="tile"><b class="num">' + a.n + '</b><small>Sedute</small>' + cmp(a.n, b.n) + '</div><div class="tile"><b class="num">' + fmtMin(a.min) + '</b><small>Tempo</small>' + cmp(a.min, b.min) + '</div>' +
+    '<div class="tile"><b class="num">' + a.hard + '</b><small>Dure</small></div><div class="tile"><b class="num">' + (dFit == null ? '–' : (dFit > 0 ? '+' : '') + dFit) + '</b><small>Fitness</small></div></div>' +
+    '<div class="t2" style="font-size:14px">' + notes.join(' ') + '</div><div class="t2" style="font-size:14px;margin-top:8px">' + next + '</div></div>';
+}
 function exportBackup() {
   S.lastBackup = Date.now(); save();
   const data = JSON.parse(JSON.stringify(S)); data.icu.key = ''; data.icu.ok = false;
@@ -608,6 +644,7 @@ function renderOggi() {
   const title = p.rest ? 'Oggi si <em>ricarica</em>.' : p.status === 'planned' && p.light === 'red' ? 'Oggi si <em>recupera</em>.' : p.status === 'done' ? 'Sudato. <em>Goduto.</em>' : p.level >= 4 ? 'Oggi si <em>suda</em>.' : p.level === 3 ? 'Oggi si <em>spinge</em> il giusto.' : 'Oggi si <em>gode</em>.';
   let h = '<div class="hello"><div class="d">' + longDate(d) + '</div><h1>' + title + '</h1></div>';
   if (S.welcome) h += welcomeHTML();
+  else if (recapDue()) h += recapHTML();
   else if (backupDue()) h += backupHTML();
   h += weatherHTML(d);
   if (!p.rest || !p.redRest) h += (rd && !editCI) ? lightHTML(rd) : checkinHTML(d);
@@ -626,6 +663,7 @@ function bindOggi(p) {
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
   on('wClose', () => { S.welcome = false; save(); render(); });
   on('wxSet', () => go('profilo'));
+  on('rcClose', () => { S.recapSeen = E.monday(d); save(); render(); });
   on('stUpd', () => { const np = planFor(d, true); syncPushState(np); toast('Seduta adeguata al nuovo semaforo'); render(); });
   on('stKeep', () => { const x = S.plans[d]; x.keptLight = x.newLight; save(); render(); });
   on('bkNow', () => { exportBackup(); render(); });
@@ -820,6 +858,15 @@ function diagText() {
   return 'Oggi da Intervals: ' + g.today.map(k => WNAME[k]).join(', ');
 }
 function diagHTML() { const t = diagText(); return t ? '<div class="help" style="margin-top:8px">' + esc(t) + '</div>' : ''; }
+function blockCardHTML() {
+  const t = today(), mon = E.monday(t), bw = E.blockWeek(S.profile, mon), nd = E.nextDeload(S.profile, t);
+  const lab = d => { const a = E.parse(d), b = E.parse(E.addDays(d, 6)); return a.getDate() + (a.getMonth() !== b.getMonth() ? ' ' + MM[a.getMonth()].slice(0, 3) : '') + '–' + b.getDate() + ' ' + MM[b.getMonth()].slice(0, 3); };
+  return '<div class="card"><h3>Blocchi e scarico</h3>' +
+    '<div class="set"><div class="l"><b>Questa settimana</b><small>' + (bw === 3 ? 'Scarico: sedute più corte e leggere' : 'Costruzione ' + (bw + 1) + ' di 3') + '</small></div></div>' +
+    '<div class="set"><div class="l"><b>Prossimo scarico</b><small>' + (bw === 3 ? 'in corso, ' + lab(mon) : lab(nd)) + '</small></div></div>' +
+    '<div class="mut" style="font-size:12.5px;margin:4px 0 10px">Sposta lo scarico su una settimana di ferie, di lavoro pesante o di trasferta. Vale dalla prossima proposta; quella di oggi resta.</div>' +
+    '<div class="row"><button class="btn sm" id="blkEarly">Anticipa</button><button class="btn sm" id="blkLate">Posticipa</button><button class="btn sm" id="blkNow"' + (bw === 3 ? ' disabled style="opacity:.4"' : '') + '>Da questa settimana</button></div></div>';
+}
 function renderProfilo() {
   const P = S.profile;
   const pace = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -874,6 +921,7 @@ function renderProfilo() {
     '<br><span style="color:var(--t2)">Ultimo backup: ' + (S.lastBackup ? new Date(S.lastBackup).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }) : 'mai') + '</span></div>' +
     '<div class="row"><button class="btn" id="bExp">Esporta backup</button><button class="btn" id="bImp">Importa</button></div><input type="file" id="bFile" accept="application/json" hidden>' +
     '<button class="btn ghost sm full" id="bReset" style="margin-top:8px;color:var(--red)">Azzera tutto</button></div>' +
+    blockCardHTML() +
     '<div class="card"><h3>Guida rapida</h3><div class="t2" style="font-size:14px;margin-bottom:10px">Come funziona SMG, funzione per funzione.</div><button class="btn full" id="guideOpen">Apri la guida</button></div>' +
     '<div class="foot">SMG · スドマゴド · v1.2</div>';
 
@@ -908,6 +956,11 @@ function bindProfilo() {
   g('lHere').onclick = locate;
   g('pIndoorMax').onchange = e => { P.indoorMax = +e.target.value; P.indoorMaxSet = true; changed(); };
   g('guideOpen').onclick = openGuide;
+  const setAnchor = (d, msg) => { P.deloadAnchor = d; delete P.blockShift; save(); toast(msg); render(); };
+  const curMon = E.monday(today());
+  g('blkEarly').onclick = () => { const nd = E.nextDeload(P, today()); const d = E.addDays(nd, -7); if (d < curMon) { toast('Lo scarico è già questa settimana'); return; } setAnchor(d, 'Scarico anticipato di una settimana'); };
+  g('blkLate').onclick = () => { setAnchor(E.addDays(E.nextDeload(P, today()), 7), 'Scarico posticipato di una settimana'); };
+  g('blkNow').onclick = () => setAnchor(curMon, 'Settimana di scarico da oggi');
   const find = async () => {
     const q = g('lQ').value.trim(); if (q.length < 2) return;
     try {
@@ -968,7 +1021,9 @@ const GUIDE = [
     <li>Evita le sedute fatte di recente e lo sport di ieri. Ogni 7 settimane propone il test FTP.</li>
     <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
     <p>Le etichette sotto la seduta spiegano il perché della scelta.</p>`],
-  ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>`],
+  ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>
+    <p>Nel Profilo, in <b>Blocchi e scarico</b>, vedi quando arriva il prossimo scarico e puoi <b>anticiparlo</b>, <b>posticiparlo</b> o farlo partire <b>da questa settimana</b> (ferie, lavoro pesante, trasferte).</p>
+    <p>Il <b>lunedì</b> (e il martedì, finché non lo chiudi) in cima a Oggi trovi il riepilogo della settimana appena chiusa: sedute, tempo, sedute dure, variazione della fitness e cosa ti aspetta.</p>`],
   ['cloud', 'Meteo e domani', `<p>La scheda in alto mostra oggi e domani, con la seduta probabile di domani e la finestra di 3 ore più asciutta se piove. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Tocca un giorno passato per vedere la seduta o segnarla.</li>
     <li><b>Andamento della forma</b>: fitness (azzurro) e fatica (rosa) delle ultime 8 settimane. Se la fitness sale, stai migliorando. Tocca il grafico per i valori del giorno.</li></ul>`],
