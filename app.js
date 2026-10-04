@@ -1116,6 +1116,8 @@ document.addEventListener('visibilitychange', () => {
   boot();
 });
 boot();
+// chiede a Chrome di non cancellare i dati dell'app quando manca spazio
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist(); }); } catch (e) {}
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
