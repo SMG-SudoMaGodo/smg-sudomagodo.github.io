@@ -137,6 +137,11 @@ const T = [
         sec('Defaticamento', [st('WALK', Math.max(3, D - 5 - n * 4), 'Cammino')])];
     } },
 
+  /* ---------- uscita decisa da te (mai proposta in automatico) ---------- */
+  { id: 'friends', name: 'Uscita con gli amici', level: 2, sports: ['mtb', 'road', 'run', 'indoor'], dur: [30, 360], manual: true,
+    desc: 'Oggi decidi tu: niente blocchi da rispettare, si va a sensazione e ci si gode la compagnia. SMG legge da Intervals com\'è andata davvero e regola i giorni successivi.',
+    build(D) { return [sec('In compagnia', [st('MIX', D, 'A sensazione, goditi la compagnia')])]; } },
+
   /* ---------- 2 · fondo ---------- */
   { id: 'end_steady', name: 'Fondo regolare', level: 2, sports: [...BIKE, 'run'], dur: [30, 150], runStage: 2,
     desc: 'Il pane quotidiano della resistenza: ritmo costante, respiro controllato, puoi parlare a frasi intere.',
@@ -540,6 +545,7 @@ function isDeload(profile, date) {
 /* ------------------------------------------------------------------ */
 function sportAllowed(profile, s) { return !!profile.sports[s]; }
 function templateOk(t, sport, profile, dayLong) {
+  if (t.manual) return false;
   if (!t.sports.includes(sport)) return false;
   if (sport === 'indoor' && t.dur[0] > (profile.indoorMax || 70)) return false;
   if (t.long && !dayLong) return false;

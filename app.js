@@ -52,7 +52,8 @@ const I = {
   sync: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/>',
   pin: '<path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
   undo: '<path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
-  cal: '<rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>'
+  cal: '<rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
+  user: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6.2 4.6 2 5.5 5"/>'
 };
 const ico = (k, cls) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"' + (cls ? ' class="' + cls + '"' : '') + '>' + I[k] + '</svg>';
 const face = n => {
@@ -295,6 +296,7 @@ function refreshToday(force) {
 }
 function syncPushState(p) {
   if (!icuOn()) return;
+  if (p.free) { if (p.pushed) { p.pushed = false; save(); icuDelete(p.date); } return; }
   if (p.rest) { if (p.pushed) { p.pushed = false; save(); icuDelete(p.date); } return; }
   if (p.status !== 'planned') return;
   if ((p.pushed && p.pushedSig !== sig(p)) || (S.icu.auto && !p.pushed && p.lightUsed)) icuPush(p, true);
@@ -341,15 +343,21 @@ function workoutHTML(p, ro) {
   let h = '<div class="card wo"><div class="glow" style="background:radial-gradient(120% 100% at 0% 0%,' + col + ',transparent 70%)"></div><div class="top">' +
     '<div class="meta">' + sportIcon(p.sport) + '<div><b>' + sp.name + '</b><small>' + sp.sub + '</small></div>' +
     '<div class="lvl">' + dots(p.level) + '<small>' + E.LEVELS[p.level] + '</small></div></div>' +
-    '<h2>' + esc(t.name) + '</h2>' +
+    '<h2>' + esc(p.freeName || t.name) + '</h2>' +
     '<div class="big"><div><strong class="num">' + fmtMin(st.min) + '</strong>durata</div><div><strong class="num">' + st.tss + '</strong>carico stimato</div>' +
     (p.deload ? '<div><span class="tag">Scarico</span></div>' : '') + '</div>' + chartSVG(sections) + '</div><div class="body">' +
     '<p class="desc">' + esc(t.desc) + '</p>';
   if (p.challenge) h += '<div class="challenge">' + ico('flag') + '<div><b>Sfida del giorno</b><span>' + esc(p.challenge) + '</span></div></div>';
   if (!ro && p.reasons && p.reasons.length) h += '<div class="reasons">' + p.reasons.map(r => '<span class="pill">' + esc(r) + '</span>').join('') + '</div>';
-  h += '<details class="steps"' + (ro ? ' open' : '') + '><summary>Dettaglio della seduta ' + ico('chev') + '</summary>' + stepsHTML(sections, p.sport) + '</details>';
+  if (!p.free) h += '<details class="steps"' + (ro ? ' open' : '') + '><summary>Dettaglio della seduta ' + ico('chev') + '</summary>' + stepsHTML(sections, p.sport) + '</details>';
 
-  if (!ro) {
+  if (!ro && p.free && p.status === 'planned') {
+    const rd0 = E.readiness(S.checkins, p.date);
+    if (rd0 && rd0.light === 'red' && p.level >= 3) h += '<div class="challenge" style="background:rgba(255,79,94,.08);border-color:rgba(255,79,94,.45)">' + ico('flag') + '<div><b style="color:var(--red)">Semaforo rosso</b><span>Goditi la compagnia, ma oggi lascia andare gli altri sulle salite.</span></div></div>';
+    h += '<div class="actions"><button class="btn" id="aFriends">' + ico('dice') + 'Cambia uscita</button><button class="btn" id="aFreeUndo">' + ico('undo') + 'Proposta SMG</button>' +
+      '<button class="btn hot wide" id="aDone">' + ico('check') + 'Fatta! Sudato e goduto</button></div>' +
+      '<div class="src" style="margin:12px 0 0;color:var(--t2)">' + ico('link') + 'Nessun allenamento strutturato su Fenix, Edge e MyWhoosh: registra l\'uscita come sempre.</div>';
+  } else if (!ro) {
     if (p.status === 'planned') {
       const dayCfg = S.profile.days[E.dow(p.date)] || {};
       const maxD = Math.min(p.opts && p.opts.extra ? 60 : (dayCfg.max || 75), p.sport === 'indoor' ? (S.profile.indoorMax || 70) : 999);
@@ -366,6 +374,7 @@ function workoutHTML(p, ro) {
         (icuOn() ? '<button class="btn" id="aPush">' + (busy.push ? ico('sync', 'spin') : ico(p.pushed ? 'check' : 'send')) + (p.pushed ? 'Inviata' : 'Invia') + '</button>'
                  : '<button class="btn" id="aIcuHow">' + ico('link') + 'Invia…</button>') +
         '<button class="btn hot wide" id="aDone">' + ico('check') + 'Fatta! Sudato e goduto</button>' +
+        '<button class="btn wide" id="aFriends"><span style="color:var(--hot2);display:flex">' + ico('user') + '</span>Decido io: esco con gli amici</button>' +
         '<button class="btn ghost wide sm" id="aSkip">Oggi salto</button></div>';
       if (p.pushed) h += '<div class="src" style="margin:12px 0 0">' + ico('check') + 'Su Intervals.icu: arriva su Fenix, Edge e MyWhoosh alla prossima sincronizzazione</div>';
     } else {
@@ -517,7 +526,8 @@ function restHTML(p) {
   const red = p.redRest;
   return '<div class="card rest"><div class="big">' + (red ? '🛋️' : '😌') + '</div><h2>' + (red ? 'Oggi riposo vero' : 'Giorno di riposo') + '</h2>' +
     '<p>' + (red ? 'Il semaforo è rosso: dormi, mangia bene, cammina un po\'. Domani si riparte più forti.' : 'Anche il riposo è allenamento: è adesso che il corpo si adatta e migliora.') + '</p>' +
-    '<button class="btn" id="aExtraDay">' + (red ? 'Solo un giro leggerissimo' : 'Voglio muovermi lo stesso') + '</button></div>';
+    '<div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aExtraDay">' + (red ? 'Solo un giro leggerissimo' : 'Voglio muovermi lo stesso') + '</button>' +
+    '<button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
 }
 
 const WXD = c => c <= 1 ? 'Sereno' : c === 2 ? 'Poco nuvoloso' : c === 3 ? 'Nuvoloso' : c <= 48 ? 'Nebbia' : c <= 57 ? 'Pioviggine' : c <= 67 ? 'Pioggia' : c <= 77 ? 'Neve' : c <= 82 ? 'Rovesci' : c <= 86 ? 'Neve' : 'Temporale';
@@ -602,7 +612,7 @@ function renderOggi() {
   h += weatherHTML(d);
   if (!p.rest || !p.redRest) h += (rd && !editCI) ? lightHTML(rd) : checkinHTML(d);
   else h += lightHTML(rd);
-  if ((!p.rest || p.redRest) && p.status === 'planned' && p.newLight && p.newLight !== p.keptLight) h += staleHTML(p);
+  if (!p.free && (!p.rest || p.redRest) && p.status === 'planned' && p.newLight && p.newLight !== p.keptLight) h += staleHTML(p);
   h += p.rest ? restHTML(p) : workoutHTML(p);
   const exId = p.rest ? E.EXTRAS[E.hash(d) % E.EXTRAS.length].id : p.extra;
   if (p.status === 'skipped' && p.altExtra) h += extraHTML(p.altExtra, d);
@@ -668,6 +678,12 @@ function bindOggi(p) {
     if (wasSkipped && icuOn() && S.icu.auto && x.lightUsed) icuPush(x, true);   // torna anche su Garmin e MyWhoosh
   });
   on('aAlt', () => openSkipSheet(d));
+  on('aFriends', () => openFriendsSheet(d));
+  on('aFreeUndo', () => {
+    const x = S.plans[d]; if (!x || !x.orig) return;
+    S.plans[d] = Object.assign({}, x.orig, { status: 'planned', pushed: false, pushedSig: null }); save();
+    syncPushState(S.plans[d]); toast('Torna la proposta di SMG'); render();
+  });
   on('aExtraDay', () => { const x = S.plans[d]; x.opts = Object.assign({}, x.opts, { extra: true }); save(); const np = planFor(d, true); syncPushState(np); render(); });
   on('aExtra', e => { const id = e.currentTarget.dataset.x; S.extraDone[d] = S.extraDone[d] === id ? null : id; save(); render(); });
 }
@@ -750,7 +766,7 @@ function renderDiario() {
     const cfg = S.profile.days[x.getDay()] || {};
     let icon = '<div class="sporticon" style="background:var(--s2);color:var(--mut)">' + ico('moon') + '</div>', title = 'Riposo', sub = '', stc = 'rest', stt = '';
     if (p && !p.rest) {
-      const tp = E.TEMPLATES[p.tid]; icon = sportIcon(p.sport); title = tp.name; sub = E.SPORTS[p.sport].name + ' · ' + fmtMin(p.dur) + ' · ' + E.LEVELS[p.level];
+      const tp = E.TEMPLATES[p.tid]; icon = sportIcon(p.sport); title = p.freeName || tp.name; sub = E.SPORTS[p.sport].name + ' · ' + fmtMin(p.dur) + ' · ' + E.LEVELS[p.level];
       stc = p.status === 'done' ? 'done' : p.status === 'skipped' ? 'skip' : 'plan'; stt = p.status === 'done' ? 'Fatta' : p.status === 'skipped' ? 'Saltata' : d < t ? (icuOn() ? 'Non fatta' : 'Non segnata') : 'Da fare';
     } else if (acts.length) {
       icon = sportIcon(acts[0].sport === 'other' ? 'road' : acts[0].sport); title = acts[0].name; sub = fmtMin(acts.reduce((s, y) => s + y.min, 0)) + ' · da Intervals.icu'; stc = 'done'; stt = 'Fatta';
@@ -940,7 +956,8 @@ const GUIDE = [
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
     <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola. Con <b>Oggi salto</b> la seduta sparisce anche da Garmin e MyWhoosh, la settimana si riequilibra (una seduta dura saltata può tornare nei giorni dopo) e puoi scegliere un'alternativa breve di mobilità o forza leggera in base al tempo che hai. <b>Annulla</b> la rimette.</li>
-    <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li></ul>
+    <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li>
+    <li><b>Decido io: esco con gli amici</b>: scegli sport, durata e "che aria tira" (tranquilla, mista, garosa). Sul Fenix non arriva nessun allenamento strutturato: registri l'uscita come sempre e SMG, leggendo da Intervals com'è andata davvero, regola i giorni dopo (se è stata dura, il giorno dopo si scarica). Funziona anche nei giorni di riposo. <b>Proposta SMG</b> rimette la seduta originale.</li></ul>
     <p>Ogni modifica dopo l'invio sostituisce la seduta su Intervals, Garmin e MyWhoosh.</p>
     <p><b>Dopo il check-in la seduta non cambia più da sola</b>, nemmeno se chiudi e riapri l'app. Se arrivano dati nuovi che cambiano il semaforo (per esempio HRV e sonno sincronizzati in ritardo), compare un avviso: scegli tu se adeguare la seduta o tenere quella di prima.</p>`],
   ['brain', 'Come sceglie', `<ul><li>Il semaforo fissa quanto può essere dura.</li>
@@ -989,6 +1006,43 @@ const ALT = [
   ['core', 'Core & stabilità', 'Forza leggera', 15, 'Addome e schiena: aiuta la posizione in sella e la schiena.'],
   ['legs', 'Forza gambe a corpo libero', 'Forza', 20, 'Gambe e glutei senza attrezzi, poco stancante per il cuore.']
 ];
+// "Decido io": uscita in compagnia, a sensazione
+const FEEL = [
+  ['easy', 2, 'Tranquilla', 'Si chiacchiera, nessuno tira'],
+  ['mix', 3, 'Mista', 'Qualche tirata sugli strappi o in volata'],
+  ['race', 4, 'Garosa', 'Si fa a gara, cartelli e salite a tutta']
+];
+const FREE_NAME = { mtb: 'Giro in MTB con gli amici', road: 'Uscita in bici con gli amici', run: 'Corsa con gli amici', indoor: 'Uscita di gruppo su MyWhoosh' };
+function openFriendsSheet(d) {
+  const p = S.plans[d] || { date: d }; const base = p.free ? p.orig : p;
+  const sports = ['mtb', 'road', 'run', 'indoor'].filter(x => S.profile.sports[x]);
+  let sp = p.free ? p.sport : (sports.includes('mtb') ? 'mtb' : sports[0]);
+  let dur = p.free ? p.dur : (base && !base.rest && base.dur ? Math.max(60, base.dur) : 120);
+  let fe = p.free ? p.freeFeel : 'mix';
+  const draw = () => {
+    const chip = (attr, val, on, lab) => '<button class="chip' + (on ? ' on' : '') + '" data-' + attr + '="' + val + '">' + lab + '</button>';
+    document.getElementById('frBody').innerHTML =
+      '<div class="ctl"><div class="lab">Cosa fate</div><div class="chips" style="flex-wrap:wrap">' + sports.map(x => chip('fsp', x, x === sp, x === 'indoor' ? 'Gruppo su MyWhoosh' : E.SPORTS[x].name)).join('') + '</div>' +
+      '<div class="lab">Quanto pensi di stare fuori</div><div class="chips" style="flex-wrap:wrap">' + [45, 60, 90, 120, 150, 180, 240, 300].map(m => chip('fdu', m, m === dur, fmtMin(m))).join('') + '</div>' +
+      '<div class="lab">Che aria tira</div></div>' +
+      FEEL.map(f => '<button class="day" data-ffe="' + f[0] + '" style="' + (f[0] === fe ? 'border-color:var(--hot)' : '') + '"><div class="info"><b>' + f[2] + '</b><small>' + f[3] + '</small></div>' + dots(f[1]) + '</button>').join('');
+    document.querySelectorAll('[data-fsp]').forEach(b => b.onclick = () => { sp = b.dataset.fsp; draw(); });
+    document.querySelectorAll('[data-fdu]').forEach(b => b.onclick = () => { dur = +b.dataset.fdu; draw(); });
+    document.querySelectorAll('[data-ffe]').forEach(b => b.onclick = () => { fe = b.dataset.ffe; draw(); });
+  };
+  openSheet('<div class="guide"><h2>Oggi decidi tu</h2><p class="intro">Uscita in compagnia, a sensazione. Sul Fenix non arriva nessun allenamento strutturato; da Intervals SMG vedrà com\'è andata e regolerà i prossimi giorni.</p><div id="frBody"></div>' +
+    '<button class="btn hot full" id="frGo" style="margin-top:12px">Fatto, divertiti!</button></div>', () => {
+      draw();
+      document.getElementById('frGo').onclick = () => {
+        const f = FEEL.find(x => x[0] === fe); const rd = E.readiness(S.checkins, d);
+        const np = { date: d, tid: 'friends', sport: sp, level: f[1], dur, free: true, freeFeel: fe, freeName: FREE_NAME[sp], status: 'planned',
+          lightUsed: rd ? rd.light : 'free', light: rd ? rd.light : null, score: rd ? rd.score : null, v: ENGINE_V, opts: {},
+          reasons: ['Uscita scelta da te: ' + f[2].toLowerCase()], orig: base && !base.free ? JSON.parse(JSON.stringify(base)) : (p.orig || null),
+          pushed: !!(p && p.pushed), pushedSig: null };
+        S.plans[d] = np; save(); syncPushState(np); closeSheet(); toast('Buona uscita!'); render();
+      };
+    });
+}
 function openSkipSheet(d) {
   const p = S.plans[d]; if (!p) return;
   const rd = E.readiness(S.checkins, d);
