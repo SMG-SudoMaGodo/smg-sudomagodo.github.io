@@ -875,7 +875,7 @@ function renderProfilo() {
     '<div class="row"><button class="btn" id="bExp">Esporta backup</button><button class="btn" id="bImp">Importa</button></div><input type="file" id="bFile" accept="application/json" hidden>' +
     '<button class="btn ghost sm full" id="bReset" style="margin-top:8px;color:var(--red)">Azzera tutto</button></div>' +
     '<div class="card"><h3>Guida rapida</h3><div class="t2" style="font-size:14px;margin-bottom:10px">Come funziona SMG, funzione per funzione.</div><button class="btn full" id="guideOpen">Apri la guida</button></div>' +
-    '<div class="foot">SMG · Sudo Ma Godo · v1.1</div>';
+    '<div class="foot">SMG · スドマゴド · v1.2</div>';
 
   $('#v-profilo').innerHTML = h;
   bindProfilo();
