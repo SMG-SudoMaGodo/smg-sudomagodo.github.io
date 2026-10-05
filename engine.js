@@ -301,11 +301,21 @@ const T = [
       return assemble(D, s, warmup(s, 12, true), [sec('Caccia', [st('Z5', 2, 'Strappo a tutta'), st('Z2', 6, 'Recupera')], n)], 8);
     } },
   { id: 'ftp_test', name: 'Test FTP 20 minuti', level: 5, sports: ['indoor', 'road'], dur: [60, 75], test: true,
-    desc: 'Il test per aggiornare le zone: 20 minuti al massimo costante. FTP = 95% della potenza media dei 20 minuti. Parti prudente e chiudi forte.',
+    desc: 'Il test per aggiornare le zone: 20 minuti al massimo costante, misurati con gli Stages. FTP = 95% della potenza media dei 20 minuti. Parti prudente e chiudi forte.',
+    setup: {
+      indoor: ['Potenza dagli Stages: sul Fenix è già così; su MyWhoosh, se puoi, mettili come sorgente primaria per il test.',
+        'Per i 20 minuti spegni l\'ERG su MyWhoosh: decidi tu lo sforzo con i rapporti.',
+        'Sul Fenix premi Lap all\'inizio e alla fine dei 20 minuti: lì leggi potenza e FC media.'],
+      road: ['Usa la bici da strada con gli Stages, su una salita lunga e regolare o un rettilineo senza incroci.',
+        'Premi Lap all\'inizio e alla fine dei 20 minuti: lì leggi potenza e FC media.']
+    },
     build(D, s) {
-      return [warmup(s, 15, true), sec('Sblocco', [st('Z6', 1, 'Apri'), st('Z1', 1, 'Recupero')], 3),
-        sec('Recupero', [st('Z1', 5, 'Pronto?')]), sec('Test', [st('TEST', 20, 'Massimo costante')]),
-        cooldown(s, Math.max(10, D - 46))];
+      const wu = clamp(D - 44, 15, 20);
+      return [sec('Riscaldamento', [st('Z1', Math.ceil(wu / 2), 'Agile e leggero', [85, 95]), st('Z2', Math.floor(wu / 2), 'Progressivo')]),
+        sec('Allunghi', [st('Z4', 1, 'Buon ritmo'), st('Z1', 2, 'Recupero')], 3),
+        sec('Recupero', [st('Z1', 5, 'Pronto?')]),
+        sec('Test', [Object.assign(st('TEST', 20, 'Massimo costante ERG spento'), { free: true })]),
+        cooldown(s, Math.max(10, D - wu - 34))];
     } }
 ];
 
@@ -548,6 +558,17 @@ function nextDeload(profile, date) {
   return null;
 }
 
+// settimana (lunedì) in cui SMG proporrà il prossimo test FTP
+function nextTest(profile, date) {
+  if (profile.testSoon) return monday(date);
+  let m = monday(date);
+  for (let i = 0; i < 30; i++, m = addDays(m, 7)) {
+    const since = diffDays(profile.lastTest || date, addDays(m, 5));
+    if (blockWeek(profile, m) !== 3 && ((since >= 42 && blockWeek(profile, m) === 0) || since >= 63)) return m;
+  }
+  return null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Scelta della seduta                                                 */
 /* ------------------------------------------------------------------ */
@@ -664,7 +685,14 @@ function propose(state, date, opts) {
   let level = Math.min(pickWeighted(r, dist), maxL);
 
   /* --- test FTP --- */
-  const testDue = P.lastTest && diffDays(P.lastTest, date) >= 49 && light === 'green' && !deload && maxL >= 5 && !opts.extra;
+  // proposto nella prima settimana dopo lo scarico, se sono passate almeno 6 settimane (oltre 9 settimane anche dopo);
+  // "prima possibile" (P.testSoon) toglie l'attesa. Solo con semaforo verde, nei giorni da qualità (lun, mer, sab).
+  const sinceTest = P.lastTest ? diffDays(P.lastTest, date) : 999;
+  const testWindow = P.testSoon || (sinceTest >= 42 && blockWeek(P, date) === 0) || sinceTest >= 63;
+  const testDue = testWindow && light === 'green' && rd && !deload && maxL >= 5 && !opts.extra && [1, 3, 6].includes(w)
+    && (!opts.forceSport || ['indoor', 'road'].includes(opts.forceSport)) && !(opts.exclude || []).includes('ftp_test')
+    && !(opts.forceDur && opts.forceDur < 60) && (sportAllowed(P, 'indoor') || sportAllowed(P, 'road'));
+  if (testDue) level = 5;
 
   /* --- meteo --- */
   const wx = opts.weather; const bad = weatherBad(wx);
@@ -710,14 +738,15 @@ function propose(state, date, opts) {
     tpl = TEMPLATES[opts.forceTid]; level = tpl.level;
   }
   for (let lv = level; lv >= 1 && !tpl; lv--) {
-    const sportsTry = sport ? [sport] : cand.filter(s => T.some(t => t.level === lv && templateOk(t, s, P, dayLong)));
+    const sportsTry = sport ? [sport] : cand.filter(s => (!testDue || lv !== 5 || ['indoor', 'road'].includes(s)) && T.some(t => t.level === lv && templateOk(t, s, P, dayLong)));
     if (!sportsTry.length) continue;
     const sp = sport || pickWeighted(r, sportsTry.map(s => [s, sportWeight(s) + 1e-6]));
     let pool = T.filter(t => t.level === lv && templateOk(t, sp, P, dayLong) && !(opts.exclude || []).includes(t.id));
     if (!pool.length) pool = T.filter(t => t.level === lv && templateOk(t, sp, P, dayLong));
     if (!pool.length) continue;
     if (opts.forceDur) { const fit = pool.filter(t => t.dur[0] <= opts.forceDur); if (fit.length) pool = fit; else if (lv > 1) continue; }
-    if (!(testDue && lv === 5)) pool = pool.filter(t => !t.test).length ? pool.filter(t => !t.test) : pool;
+    if (testDue && lv === 5 && pool.some(t => t.test)) pool = pool.filter(t => t.test);
+    else pool = pool.filter(t => !t.test).length ? pool.filter(t => !t.test) : pool;
     const weights = pool.map(t => {
       let x = 1; const last = ctx.lastUse[t.id];
       if (last != null) x *= last <= 3 ? 0.05 : last <= 7 ? 0.25 : last <= 14 ? 0.6 : 1;
@@ -730,7 +759,7 @@ function propose(state, date, opts) {
   if (!tpl) return { date, rest: true, reasons: ['Nessuna seduta adatta con gli sport attivi'] };
 
   /* --- durata --- */
-  let [lo, hi] = durRange(tpl, sport, dayLong, dayMax, light, level, P);
+  let [lo, hi] = tpl.test ? [tpl.dur[0], Math.min(tpl.dur[1], dayMax)] : durRange(tpl, sport, dayLong, dayMax, light, level, P);
   // progressione: nelle 3 settimane di costruzione la durata (e quindi il numero di ripetute) sale di un gradino
   const bw = blockWeek(P, date);
   let step = deload ? 0 : bw + (fb.easy ? 1 : 0) - (fb.tired ? 1 : 0);
@@ -748,7 +777,7 @@ function propose(state, date, opts) {
   /* --- motivi e sfida --- */
   if (bad === 2 && sport === 'indoor') reasons.push('Pioggia prevista: meglio i rulli');
   else if (bad === 1 && sport === 'indoor') reasons.push('Meteo incerto: rulli al riparo');
-  if (tpl.test) reasons.push('Sono passate più di 7 settimane dall\'ultimo test: aggiorniamo le zone');
+  if (tpl.test) reasons.push(P.testSoon ? 'Test FTP chiesto da te: oggi sei fresco, aggiorniamo le zone' : blockWeek(P, date) === 0 ? 'Prima settimana dopo lo scarico: sei fresco, aggiorniamo le zone' : 'Sono passate più di 9 settimane dall\'ultimo test: aggiorniamo le zone');
   if (level >= 4 && ctx.weekHard === 0) reasons.push('Prima seduta intensa della settimana');
   if (dayLong && level === 2) reasons.push('Giorno lungo: accumula ore di fondo');
   if (winter && sport === 'mtb') reasons.push('Autunno/inverno: fuoristrada, come piace a te');
@@ -758,7 +787,7 @@ function propose(state, date, opts) {
     tpl.challengeKey ? CHALLENGES[tpl.challengeKey] : [],
     sport === 'indoor' ? CHALLENGES.indoor : sport === 'run' ? CHALLENGES.run : CHALLENGES.out,
     level <= 3 ? CHALLENGES.any : []);
-  const challenge = cPool.length && r() < 0.8 ? cPool[Math.floor(r() * cPool.length)] : null;
+  const challenge = !tpl.test && cPool.length && r() < 0.8 ? cPool[Math.floor(r() * cPool.length)] : null;
 
   // extra forza/mobilità nei giorni facili
   let extra = null;
@@ -853,7 +882,7 @@ function toIcu(plan, sections) {
   sections.forEach(s => {
     lines.push(s.rep > 1 ? cleanTxt(s.title) + ' ' + s.rep + 'x' : cleanTxt(s.title));
     s.steps.forEach(x => {
-      let l = '- ' + (x.txt ? cleanTxt(x.txt) + ' ' : '') + icuDur(x.d) + ' ' + icuTarget(x.z, plan.sport);
+      let l = '- ' + (x.txt ? cleanTxt(x.txt) + ' ' : '') + icuDur(x.d) + ' ' + (x.free && plan.sport === 'indoor' ? 'freeride' : icuTarget(x.z, plan.sport));
       if (x.cad && SPORTS[plan.sport].target === 'power') l += ' ' + x.cad[0] + '-' + x.cad[1] + 'rpm';
       lines.push(l);
     });
@@ -865,7 +894,7 @@ function toIcu(plan, sections) {
 function icuEvent(plan, profile) {
   const t = TEMPLATES[plan.tid];
   const sections = build(plan, profile);
-  let desc = t.desc + (plan.challenge ? '\n\nSfida: ' + plan.challenge : '') + '\n\n' + toIcu(plan, sections);
+  let desc = t.desc + (t.setup && t.setup[plan.sport] ? '\n\n' + t.setup[plan.sport].map(x => '• ' + x).join('\n') : '') + (plan.challenge ? '\n\nSfida: ' + plan.challenge : '') + '\n\n' + toIcu(plan, sections);
   return {
     category: 'WORKOUT',
     start_date_local: plan.date + 'T00:00:00',
@@ -913,6 +942,6 @@ root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
   defaultProfile, readiness, propose, indoorVersion, build, stats, profileBars, targetText,
-  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg
+  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest
 };
 })(typeof window !== 'undefined' ? window : globalThis);

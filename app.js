@@ -158,6 +158,7 @@ async function icuProfile() {
   const has = (s, t) => (s.types || []).includes(t);
   const ride = ss.find(s => has(s, 'Ride')) || ss.find(s => has(s, 'VirtualRide') || has(s, 'MountainBikeRide') || has(s, 'GravelRide'));
   const run = ss.find(s => has(s, 'Run'));
+  S.icu.rideSS = ride && ride.id != null ? ride.id : null;   // per scrivere l'FTP dopo un test
   const P = S.profile, got = {}, changed = [];
   const ftp = ride && +(ride.ftp || 0); if (ftp >= 80 && ftp <= 600) got.ftp = Math.round(ftp);
   const lthr = ride && +(ride.lthr || ride.fthr || 0) || run && +(run.lthr || run.fthr || 0); if (lthr >= 100 && lthr <= 220) got.lthr = Math.round(lthr);
@@ -358,6 +359,7 @@ function workoutHTML(p, ro) {
     (p.deload ? '<div><span class="tag">Scarico</span></div>' : '') + '</div>' + chartSVG(sections) + '</div><div class="body">' +
     '<p class="desc">' + esc(t.desc) + '</p>';
   if (p.challenge) h += '<div class="challenge">' + ico('flag') + '<div><b>Sfida del giorno</b><span>' + esc(p.challenge) + '</span></div></div>';
+  if (t.setup && t.setup[p.sport] && p.status !== 'done') h += '<div class="challenge" style="background:rgba(45,180,242,.07);border-color:rgba(45,180,242,.4)">' + ico('flag') + '<div><b style="color:var(--hot2)">Come impostare il test</b><ul style="margin:4px 0 0;padding-left:16px;font-size:13.5px">' + t.setup[p.sport].map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div></div>';
   if (st.min >= 90 && p.sport !== 'run' || st.min >= 75 && p.sport === 'run') h += fuelHTML(st.min, p.sport, wxFor(p.date));
   if (!ro && p.reasons && p.reasons.length) h += '<div class="reasons">' + p.reasons.map(r => '<span class="pill">' + esc(r) + '</span>').join('') + '</div>';
   if (!p.free) h += '<details class="steps"' + (ro ? ' open' : '') + '><summary>Dettaglio della seduta ' + ico('chev') + '</summary>' + stepsHTML(sections, p.sport) + '</details>';
@@ -390,7 +392,9 @@ function workoutHTML(p, ro) {
       if (p.pushed) h += '<div class="src" style="margin:12px 0 0">' + ico('check') + 'Su Intervals.icu: arriva su Fenix, Edge e MyWhoosh alla prossima sincronizzazione</div>';
     } else {
       h += p.status === 'done'
-        ? '<div class="done-banner">' + ico('check') + '<div><b>Fatta! Sudato e goduto.</b><span>' + (p.via === 'icu' ? 'Rilevata da Intervals.icu' : 'Segnata a mano') + '</span></div></div>'
+        ? '<div class="done-banner">' + ico('check') + '<div><b>Fatta! Sudato e goduto.</b><span>' + (p.via === 'icu' ? 'Rilevata da Intervals.icu' : 'Segnata a mano') + '</span></div></div>' +
+          (t.test ? (p.testRes ? '<div class="src" style="margin:10px 0 0">' + ico('check') + 'Test registrato: FTP ' + p.testRes.ftp + ' W' + (p.testRes.lthr ? ' · FC di soglia ' + p.testRes.lthr + ' bpm' : '') + '</div>'
+                                : '<button class="btn hot full" id="aTestRes" style="margin-top:8px">' + ico('flag') + 'Inserisci il risultato del test</button>') : '')
         : '<div class="done-banner skip">' + ico('x') + '<div style="flex:1"><b>Seduta saltata</b><span>Nessun problema: le prossime sedute tengono conto che oggi non l\'hai fatta.</span></div></div>' +
           (p.altExtra ? '' : '<button class="btn sm full" id="aAlt" style="margin-top:8px">' + ico('strength') + 'Proponimi qualcosa di breve</button>');
       h += '<button class="btn ghost sm full" id="aUndo" style="margin-top:8px">' + ico('undo') + 'Annulla</button>';
@@ -735,7 +739,8 @@ function bindOggi(p) {
   on('aPush', () => icuPush(S.plans[d]));
   on('aIcuHow', () => openSheet('<h3 style="margin:0 0 8px;font-size:20px">Inviala a Fenix, Edge e MyWhoosh</h3><p class="t2">Collega Intervals.icu nel Profilo: da lì la seduta arriva da sola su Garmin Connect (e quindi su orologio e ciclocomputer) e nel calendario di MyWhoosh.</p><button class="btn hot full" id="goProf">Vai al Profilo</button>',
     () => { document.getElementById('goProf').onclick = () => { closeSheet('profilo'); }; }));
-  on('aDone', () => { const x = S.plans[d]; x.status = 'done'; x.via = 'manual'; save(); toast('Grande! Sudato e goduto 💪'); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  on('aDone', () => { const x = S.plans[d]; x.status = 'done'; x.via = 'manual'; save(); render(); if (E.TEMPLATES[x.tid] && E.TEMPLATES[x.tid].test) { openTestSheet(d); return; } toast('Grande! Sudato e goduto 💪'); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  on('aTestRes', () => openTestSheet(d));
   on('aSkip', () => {
     const x = S.plans[d]; x.status = 'skipped'; delete x.altExtra;
     if (x.pushed) { x.pushed = false; icuDelete(d); }
@@ -917,7 +922,9 @@ function renderProfilo() {
     '<div class="set"><div class="l"><b>FC di soglia</b><small>Zone cardio per bici e corsa</small>' + srcNote('lthr') + '</div><div class="v">' + num('pLthr', P.lthr, 'bpm', 'lthr') + '</div></div>' +
     '<div class="set"><div class="l"><b>Passo di soglia</b><small>Per le sedute di corsa</small>' + srcNote('thrPace') + '</div><div class="v">' + num('pPace', pace(P.thrPace), '/km', 'thrPace') + '</div></div>' +
     ((S.icu.prof || []).length && icuOn() ? '<div class="mut" style="font-size:12.5px;margin-top:8px">I valori da Intervals.icu si aggiornano a ogni sincronizzazione: per cambiarli, modificali su Intervals.</div>' : '') +
-    '<div class="set"><div class="l"><b>Ultimo test FTP</b><small>' + longDate(P.lastTest) + ' · prossimo proposto dopo 7 settimane</small></div><button class="btn sm" id="pTest">Fatto oggi</button></div></div>';
+    (() => { const nt = E.nextTest(P, today());
+      return '<div class="set"><div class="l"><b>Test FTP</b><small>Ultimo: ' + longDate(P.lastTest) + '<br>Prossimo: ' + (P.testSoon ? 'appena hai il semaforo verde in un giorno di qualità' : nt ? 'settimana del ' + longDate(nt).replace(/^\S+ /, '') : '—') + '</small></div></div>' +
+        '<div class="row" style="margin-top:6px"><button class="btn sm" id="pTestSoon">' + (P.testSoon ? 'Annulla anticipo' : 'Anticipa: prima possibile') + '</button><button class="btn sm" id="pTest">Inserisci risultato</button></div>'; })() + '</div>';
 
   h += '<div class="card"><h3>Sport</h3>' +
     [['indoor', 'Rulli e MyWhoosh'], ['mtb', 'Il preferito in autunno e inverno'], ['road', 'Con misuratore di potenza']].map(([s, sub]) =>
@@ -958,7 +965,7 @@ function renderProfilo() {
     '<button class="btn ghost sm full" id="bReset" style="margin-top:8px;color:var(--red)">Azzera tutto</button></div>' +
     specialCardHTML() + blockCardHTML() +
     '<div class="card"><h3>Guida rapida</h3><div class="t2" style="font-size:14px;margin-bottom:10px">Come funziona SMG, funzione per funzione.</div><button class="btn full" id="guideOpen">Apri la guida</button></div>' +
-    '<div class="foot">SMG · スドマゴド · v1.2</div>';
+    '<div class="foot">SMG · スドマゴド · v1.3</div>';
 
   $('#v-profilo').innerHTML = h;
   bindProfilo();
@@ -969,7 +976,8 @@ function bindProfilo() {
   const numIn = (id, fn) => { const el = g(id); if (el) el.onchange = () => { const v = +el.value.replace(',', '.'); if (!isNaN(v) && v > 0) { fn(v); save(); render(); } else render(); }; };
   numIn('pFtp', v => P.ftp = Math.round(v)); numIn('pW', v => P.weight = v); numIn('pLthr', v => P.lthr = Math.round(v));
   g('pPace').onchange = () => { const m = g('pPace').value.match(/^(\d{1,2})[:.,'](\d{1,2})$/); if (m) { P.thrPace = +m[1] * 60 + +m[2]; save(); } render(); };
-  g('pTest').onclick = () => { P.lastTest = today(); save(); toast('Ricordati di aggiornare l\'FTP'); render(); };
+  g('pTest').onclick = () => { const d = Object.keys(S.plans).filter(k => k <= today() && k >= E.addDays(today(), -7) && S.plans[k].tid === 'ftp_test' && S.plans[k].status === 'done').sort().pop(); openTestSheet(d || today()); };
+  g('pTestSoon').onclick = () => { P.testSoon = !P.testSoon; save(); toast(P.testSoon ? 'Il test arriva al primo giorno verde di qualità (lun, mer o sab)' : 'Test di nuovo dopo il prossimo scarico'); render(); };
   const changed = () => { save(); const p = S.plans[today()]; if (p && p.status === 'planned') refreshToday(true); render(); };
   ['indoor', 'mtb', 'road', 'run', 'strength'].forEach(s => g('sp_' + s).onchange = e => {
     P.sports[s] = e.target.checked;
@@ -1056,7 +1064,8 @@ const GUIDE = [
     <li>Lunedì e mercoledì tendono alla qualità, venerdì al fondo, sabato o domenica alla seduta dura del blocco.</li>
     <li>Sport, da ottobre a marzo: <b>qualità sui rulli</b> (sedute dure a potenza, in ERG) e <b>volume fuori</b> (fondo e lunghi in MTB/gravel, rulli solo se piove). Da aprile a settembre più spazio alla strada e meno ai rulli.</li>
     <li>Sui rulli al massimo 70 minuti (si cambia nel Profilo, sotto "La tua settimana").</li>
-    <li>Evita le sedute fatte di recente e lo sport di ieri. Ogni 7 settimane propone il test FTP.</li>
+    <li>Evita le sedute fatte di recente e lo sport di ieri.</li>
+    <li><b>Test FTP</b>: lo propone nella prima settimana dopo lo scarico, quando sei fresco, se sono passate almeno 6 settimane dall'ultimo (oltre 9 settimane anche in altre settimane, mai durante lo scarico). Solo con semaforo verde, di lunedì, mercoledì o sabato, sui rulli o con la bici da strada: sempre con gli <b>Stages</b>. Sui rulli i 20 minuti arrivano a MyWhoosh senza ERG (se non si spegne da solo, spegnilo tu). <b>Rilancia</b> lo rimanda.</li>
     <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
     <p>Le etichette sotto la seduta spiegano il perché della scelta. Nelle sedute oltre 90 minuti (75 di corsa) trovi anche le indicazioni di <b>rifornimento</b>, adattate al meteo.</p>`],
   ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>
@@ -1068,7 +1077,7 @@ const GUIDE = [
   ['link', 'Intervals, Garmin, MyWhoosh', `<ul><li><b>SMG → Intervals → Garmin Connect → Fenix ed Edge</b>; e <b>Intervals → MyWhoosh</b> per le sedute indoor.</li>
     <li>Da Garmin a Intervals arrivano attività, sonno, HRV, FC a riposo e peso. FTP e soglie no.</li>
     <li>FTP, FC e passo di soglia SMG li legge da Intervals: <b>si cambiano lì</b> (e se vuoi anche su Garmin, per le zone dell'orologio).</li></ul>`],
-  ['user', 'Profilo', `<ul><li><b>Test FTP</b>: dopo il test aggiorna l'FTP su Intervals; SMG lo riconosce e riparte il conteggio delle 7 settimane.</li>
+  ['user', 'Profilo', `<ul><li><b>Test FTP</b>: vedi quando arriva il prossimo; <b>Anticipa</b> lo fa proporre al primo giorno verde di qualità. Dopo il test tocca <b>Inserisci il risultato</b> (anche dalla seduta): potenza media e FC media del Lap dei 20 minuti sul Fenix, cioè dagli Stages. SMG calcola l'FTP (95%), la scrive su Intervals.icu insieme alla FC di soglia e ti ricorda di aggiornare MyWhoosh e Garmin Connect. Se cambi l'FTP direttamente su Intervals, SMG lo prende come nuovo test.</li>
     <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Tempi da concordare con chi ti segue.</li>
     <li><b>La tua settimana</b>: giorni attivi, giorni lunghi e durata massima di ciascuno.</li>
     <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>
@@ -1182,6 +1191,46 @@ function openSkipSheet(d) {
     '<button class="btn full" id="altNone" style="margin-top:6px">No, oggi riposo</button></div>', () => {
       document.querySelectorAll('[data-alt]').forEach(b => b.onclick = () => { p.altExtra = b.dataset.alt; save(); closeSheet(); render(); });
       document.getElementById('altNone').onclick = () => { p.altExtra = null; save(); closeSheet(); render(); };
+    });
+}
+// risultato del test FTP: potenza media e FC media dei 20 minuti (dal Lap del Fenix, cioè dagli Stages)
+function openTestSheet(d) {
+  const P = S.profile; const p = S.plans[d];
+  openSheet('<div class="guide"><h2>Risultato del test</h2><p class="intro">Leggi sul Fenix il Lap dei 20 minuti: potenza media (dagli Stages) e FC media.</p>' +
+    '<div class="set"><div class="l"><b>Potenza media 20\'</b></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tW" placeholder="' + Math.round(P.ftp / 0.95) + '"><span>W</span></div></div></div></div>' +
+    '<div class="set"><div class="l"><b>FC media 20\'</b><small>Facoltativa: diventa la FC di soglia</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tH" placeholder="' + P.lthr + '"><span>bpm</span></div></div></div></div>' +
+    '<div id="tOut" class="t2" style="margin:12px 2px;font-size:14.5px">FTP = 95% della potenza media.</div>' +
+    '<button class="btn hot full" id="tSave" disabled>Salva' + (icuOn() ? ' e aggiorna Intervals.icu' : '') + '</button></div>', () => {
+      const $w = document.getElementById('tW'), $h = document.getElementById('tH'), out = document.getElementById('tOut'), btn = document.getElementById('tSave');
+      const val = () => { const w = +$w.value, hr = +$h.value; return { w: w >= 100 && w <= 700 ? w : 0, hr: hr >= 100 && hr <= 210 ? Math.round(hr) : 0 }; };
+      const upd = () => { const v = val(); btn.disabled = !v.w;
+        if (!v.w) { out.textContent = 'FTP = 95% della potenza media.'; return; }
+        const f = Math.round(v.w * 0.95), diff = f - P.ftp;
+        out.innerHTML = 'Nuova FTP: <b style="color:var(--hot2)">' + f + ' W</b> (' + (diff >= 0 ? '+' : '') + diff + ' W, ' + (f / P.weight).toFixed(2).replace('.', ',') + ' W/kg)' + (v.hr ? '<br>FC di soglia: <b>' + v.hr + ' bpm</b> (prima ' + P.lthr + ')' : ''); };
+      $w.oninput = upd; $h.oninput = upd;
+      btn.onclick = async () => {
+        const v = val(); if (!v.w) return;
+        const ftp = Math.round(v.w * 0.95);
+        btn.disabled = true; btn.textContent = 'Salvo…';
+        let icuOk = null;
+        if (icuOn()) {
+          try {
+            if (S.icu.rideSS == null) await icuProfile();
+            if (S.icu.rideSS == null) throw 0;
+            await icu('/sport-settings/' + encodeURIComponent(S.icu.rideSS), 'PUT', Object.assign({ ftp }, v.hr ? { lthr: v.hr } : {}));
+            icuOk = true;
+          } catch (e) { icuOk = false; }
+        }
+        P.ftp = ftp; if (v.hr) P.lthr = v.hr; P.lastTest = d; P.testSoon = false;
+        if (p) p.testRes = { w: v.w, ftp, lthr: v.hr || null };
+        save();
+        const next = '<ul style="margin:6px 0 0;padding-left:18px">' + (icuOk === false ? '<li><b>Intervals.icu</b>: aggiornamento non riuscito, cambiala a mano in Impostazioni → Ciclismo (altrimenti al prossimo sync torna il valore vecchio).</li>' : '') +
+          '<li><b>MyWhoosh</b>: imposta FTP ' + ftp + ' W nel profilo.</li><li><b>Garmin Connect</b>: aggiorna FTP' + (v.hr ? ' e FC di soglia' : '') + ' nelle zone utente, così Fenix ed Edge si allineano.</li></ul>';
+        $('#sheetBody').innerHTML = '<div class="guide"><h2>FTP ' + ftp + ' W</h2><p class="intro">' + (icuOk ? 'Aggiornata su SMG e su Intervals.icu.' : 'Aggiornata su SMG.') + ' Restano due passaggi a mano:</p>' + next +
+          '<p class="intro" style="margin-top:10px">Prossimo test dopo il prossimo scarico, tra almeno 6 settimane.</p><button class="btn hot full" id="tOk">Fatto</button></div>';
+        document.getElementById('tOk').onclick = () => closeSheet();
+        render();
+      };
     });
 }
 function openSheet(html, bind) {
