@@ -206,7 +206,17 @@ async function icuSync(quiet) {
     (acts || []).forEach(a => {
       const d = (a.start_date_local || '').slice(0, 10); if (!d) return;
       const rpe = +(a.icu_rpe || a.perceived_exertion || 0), feel = +(a.feel || 0);
-      (byDay[d] = byDay[d] || []).push({ sport: E.activitySport(a.type), level: E.activityLevel(a, S.profile), name: a.name || a.type,
+      const t0 = Date.parse(a.start_date_local || '') || 0, mv = a.moving_time || a.elapsed_time || 0;
+      // doppione (stessa uscita registrata da Fenix e da MyWhoosh): stesso giorno, partenza entro 15 minuti
+      const list = byDay[d] = byDay[d] || [];
+      const dup = list.find(x => Math.abs(x.t0 - t0) <= 15 * 60e3);
+      if (dup) {
+        const score = o => (o.watts ? 2 : 0) + (o.hr ? 1 : 0);
+        const cand = { watts: !!(a.icu_average_watts || a.average_watts), hr: !!a.average_heartrate };
+        if (score(cand) <= score(dup)) return;   // si tiene la registrazione più completa
+        list.splice(list.indexOf(dup), 1);
+      }
+      list.push({ t0, watts: !!(a.icu_average_watts || a.average_watts), hr: !!a.average_heartrate, sport: E.activitySport(a.type), level: E.activityLevel(a, S.profile), name: a.name || a.type,
         min: Math.round((a.moving_time || a.elapsed_time || 0) / 60), load: a.icu_training_load || 0,
         rpe: rpe >= 1 && rpe <= 10 ? rpe : null, feel: feel >= 1 && feel <= 5 ? feel : null });
     });
