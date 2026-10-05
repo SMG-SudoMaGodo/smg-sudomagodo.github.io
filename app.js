@@ -281,7 +281,7 @@ function planFor(d, forceRegen) {
   const opts = old && old.opts || {};
   const wx = wxFor(d);
   const np = E.propose(S, d, Object.assign({}, opts, { weather: wx }));
-  Object.assign(np, { opts, lightUsed: light, newLight: null, status: 'planned', v: ENGINE_V, wxUsed: !!wx,
+  Object.assign(np, { opts, lightUsed: light, newLight: null, illUsed: (S.checkins[d] || {}).ill || null, status: 'planned', v: ENGINE_V, wxUsed: !!wx,
     pushed: old ? !!old.pushed : false, pushedSig: old ? old.pushedSig : null });
   S.plans[d] = np; save();
   return np;
@@ -348,6 +348,7 @@ function workoutHTML(p, ro) {
     (p.deload ? '<div><span class="tag">Scarico</span></div>' : '') + '</div>' + chartSVG(sections) + '</div><div class="body">' +
     '<p class="desc">' + esc(t.desc) + '</p>';
   if (p.challenge) h += '<div class="challenge">' + ico('flag') + '<div><b>Sfida del giorno</b><span>' + esc(p.challenge) + '</span></div></div>';
+  if (st.min >= 90 && p.sport !== 'run' || st.min >= 75 && p.sport === 'run') h += fuelHTML(st.min, p.sport, wxFor(p.date));
   if (!ro && p.reasons && p.reasons.length) h += '<div class="reasons">' + p.reasons.map(r => '<span class="pill">' + esc(r) + '</span>').join('') + '</div>';
   if (!p.free) h += '<details class="steps"' + (ro ? ' open' : '') + '><summary>Dettaglio della seduta ' + ico('chev') + '</summary>' + stepsHTML(sections, p.sport) + '</details>';
 
@@ -359,7 +360,7 @@ function workoutHTML(p, ro) {
       '<div class="src" style="margin:12px 0 0;color:var(--t2)">' + ico('link') + 'Nessun allenamento strutturato su Fenix, Edge e MyWhoosh: registra l\'uscita come sempre.</div>';
   } else if (!ro) {
     if (p.status === 'planned') {
-      const dayCfg = S.profile.days[E.dow(p.date)] || {};
+      const dayCfg = E.dayCfg(S, p.date);
       const maxD = Math.min(p.opts && p.opts.extra ? 60 : (dayCfg.max || 75), p.sport === 'indoor' ? (S.profile.indoorMax || 70) : 999);
       const sports = ['indoor', 'mtb', 'road', 'run'].filter(s => S.profile.sports[s]);
       const fs = p.opts && p.opts.forceSport, fd = p.opts && p.opts.forceDur;
@@ -388,6 +389,18 @@ function workoutHTML(p, ro) {
   return h + '</div></div>';
 }
 
+// indicazioni di massima per bere e mangiare nelle uscite lunghe
+function fuelHTML(min, sport, w) {
+  const hot = w && w.tmax >= 25, cold = w && w.tmax != null && w.tmax < 8;
+  const h = min / 60;
+  const items = sport === 'run'
+    ? ['Acqua: qualche sorso ogni 15–20 minuti, ' + (hot ? 'con sali minerali.' : 'oltre l\'ora porta una borraccina.'), 'Oltre i 75–90 minuti: un gel o qualche zucchero a metà.', 'Ultimo pasto vero 2–3 ore prima.']
+    : ['Bere: circa una borraccia (500–750 ml) ogni ora' + (hot ? ', di più col caldo e con sali minerali.' : cold ? ': col freddo la sete si sente meno, bevi lo stesso.' : '.'),
+       'Mangiare: 30–60 g di carboidrati all\'ora dalla prima mezz\'ora, per esempio una barretta o un gel ogni 40 minuti.',
+       'Per ' + fmtMin(min) + ': circa ' + Math.max(1, Math.ceil(h)) + ' borracc' + (Math.ceil(h) > 1 ? 'e' : 'ia') + ' (anche riempiendo lungo il giro) e ' + Math.max(1, Math.round(h * 1.5)) + ' tra barrette e gel.',
+       'Colazione 2–3 ore prima; al rientro carboidrati e proteine entro un\'ora.'];
+  return '<div class="challenge" style="background:rgba(45,180,242,.07);border-color:rgba(45,180,242,.4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--hot)"><path d="M8 2h8M9 2v3a4 4 0 0 1-1 2.6L7 9v11a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9l-1-1.4A4 4 0 0 1 15 5V2"/></svg><div><b style="color:var(--hot2)">Rifornimento</b><ul style="margin:4px 0 0;padding-left:16px;font-size:13.5px">' + items.map(x => '<li>' + x + '</li>').join('') + '</ul></div></div>';
+}
 function extraHTML(id, d) {
   const x = E.EXTRAS.find(e => e.id === id); if (!x) return '';
   const done = S.extraDone[d] === id;
@@ -410,6 +423,8 @@ function checkinHTML(d) {
     '<div class="grid2">' + f('hrv', 'HRV notturna', 'ms', 'es. 62') + f('rhr', 'FC a riposo', 'bpm', 'es. 46') +
     f('sleep', 'Punteggio sonno', '/100', 'es. 78') + f('garmin', 'Prontezza Garmin', '/100', 'facoltativo') + '</div>' +
     '<label class="check"><span class="switch"><input type="checkbox" id="ci_pain"' + (c.pain ? ' checked' : '') + '><i></i></span>Qualche dolore o acciacco oggi</label>' +
+    '<div class="ctl" style="margin:0 0 14px"><div class="lab">Malanno</div><div class="chips" style="flex-wrap:wrap">' +
+    [['', 'No'], ['neck', 'Raffreddore, gola'], ['body', 'Febbre, dolori diffusi']].map(([v, l]) => '<button class="chip' + ((c.ill || '') === v ? ' on' : '') + '" data-ill="' + v + '">' + l + '</button>').join('') + '</div></div>' +
     '<button class="btn hot full" id="ciGo">Calcola il semaforo</button></div>';
 }
 
@@ -523,6 +538,8 @@ function staleHTML(p) {
     '<div class="row" style="margin-top:12px"><button class="btn hot" id="stUpd">Adegua la seduta</button><button class="btn" id="stKeep">Tieni questa</button></div></div>';
 }
 function restHTML(p) {
+  if (p.illRest) return '<div class="card rest"><div class="big">🤒</div><h2>Riposa e guarisci</h2><p>Con febbre o dolori diffusi allenarsi fa solo danni. Bevi, dormi, e quando stai meglio segnalo nel check-in: SMG ti farà rientrare con calma.</p></div>';
+  if (p.special === 'off') return '<div class="card rest"><div class="big">📅</div><h2>Oggi hai un impegno</h2><p>Giorno segnato come impegnato. Se poi trovi un buco, puoi comunque muoverti.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aExtraDay">Ho trovato un buco</button><button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
   const red = p.redRest;
   return '<div class="card rest"><div class="big">' + (red ? '🛋️' : '😌') + '</div><h2>' + (red ? 'Oggi riposo vero' : 'Giorno di riposo') + '</h2>' +
     '<p>' + (red ? 'Il semaforo è rosso: dormi, mangia bene, cammina un po\'. Domani si riparte più forti.' : 'Anche il riposo è allenamento: è adesso che il corpo si adatta e migliora.') + '</p>' +
@@ -543,16 +560,16 @@ function wxDayHTML(d, label, cls) {
 }
 // seduta probabile di domani: stessa logica della proposta, come se oggi facessi la seduta prevista
 function tomorrowPreview(d) {
-  const t = E.addDays(d, 1); const cfg = S.profile.days[E.dow(t)] || {};
+  const t = E.addDays(d, 1); const cfg = E.dayCfg(S, t);
   if (!cfg.on) return null;
   const pv = E.propose(S, t, { weather: wxFor(t), assumeDone: d });
   return pv.rest ? null : pv;
 }
 function planLine(d) {
-  const t = E.addDays(d, 1); const cfg = S.profile.days[E.dow(t)] || {}; const w = wxFor(t);
+  const t = E.addDays(d, 1); const cfg = E.dayCfg(S, t); const w = wxFor(t);
   const pv = tomorrowPreview(d);
   const sportTxt = s => ({ indoor: 'sui rulli', mtb: 'in MTB', road: 'in bici da strada', run: 'di corsa' })[s];
-  let plan = !cfg.on ? '<b>Domani riposo.</b>' : pv
+  let plan = !cfg.on ? (cfg.special === 'off' ? '<b>Domani hai un impegno: niente allenamento.</b>' : '<b>Domani riposo.</b>') : pv
     ? '<b>Domani probabile: ' + esc(E.TEMPLATES[pv.tid].name) + '</b> ' + sportTxt(pv.sport) + ', ' + fmtMin(pv.dur) + '.'
     : '<b>Domani ' + (cfg.long ? 'giorno lungo' : 'allenamento') + ', fino a ' + fmtMin(cfg.max) + '.</b>';
   if (cfg.on && w) {
@@ -597,6 +614,8 @@ function recapHTML() {
   else if (a.hard >= 2) notes.push('Due sedute di qualità e il resto di fondo: settimana fatta bene.');
   else if (a.hard === 0) notes.push('Nessuna seduta di qualità: questa settimana ne trovi.');
   else notes.push('Settimana regolare: ' + a.n + ' sedute, ' + a.hard + ' di qualità.');
+  let sx = 0; for (let i = 0; i < 7; i++) if (S.extraDone && S.extraDone[E.addDays(prev, i)]) sx++;
+  if (S.profile.sports.strength) notes.push('Forza e mobilità: ' + sx + ' su 2' + (sx >= 2 ? ', ottimo.' : sx === 1 ? ', ne manca una.' : ': questa settimana ritagliati due sessioni brevi.'));
   if (dFit != null) notes.push(dFit > 0 ? 'Fitness in crescita (+' + dFit + ').' : dFit < 0 ? 'Fitness in calo (' + dFit + '): normale dopo una settimana leggera o di scarico.' : 'Fitness stabile.');
   const bw = E.blockWeek(S.profile, mon);
   const next = bw === 3 ? 'Questa settimana è di <b>scarico</b>: sedute più corte e leggere, per assorbire il lavoro fatto.' : 'Questa settimana: <b>costruzione ' + (bw + 1) + '/3</b>' + (bw === 0 ? ', si riparte dopo lo scarico.' : ', un gradino in più.') ;
@@ -668,6 +687,7 @@ function bindOggi(p) {
   on('stKeep', () => { const x = S.plans[d]; x.keptLight = x.newLight; save(); render(); });
   on('bkNow', () => { exportBackup(); render(); });
   on('bkLater', () => { S.backupSnooze = Date.now() + 7 * 86400e3; save(); render(); });
+  document.querySelectorAll('[data-ill]').forEach(b => b.onclick = () => document.querySelectorAll('[data-ill]').forEach(x => x.classList.toggle('on', x === b)));
   document.querySelectorAll('[data-feel]').forEach(b => b.onclick = () => {
     document.querySelectorAll('[data-feel]').forEach(x => x.classList.toggle('on', x === b));
   });
@@ -683,12 +703,13 @@ function bindOggi(p) {
       c[k] = n == null || isNaN(n) ? null : n;
     });
     c.pain = document.getElementById('ci_pain').checked;
+    const illSel = document.querySelector('[data-ill].on'); c.ill = illSel && illSel.dataset.ill || null;
     const r0 = E.readiness(Object.assign({}, S.checkins, { [d]: c }), d) || {};
     c.snap = { at: Date.now(), score: r0.score, light: r0.light };
     SNAPK.forEach(k => { c.snap[k] = c[k] == null || c[k] === '' ? null : +c[k]; });
     S.checkins[d] = c; leaveEdit(); save();
     const cur = S.plans[d]; const nl = (E.readiness(S.checkins, d) || {}).light;
-    refreshToday(!!(cur && cur.status === 'planned' && cur.lightUsed && cur.lightUsed !== nl)); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    refreshToday(!!(cur && cur.status === 'planned' && cur.lightUsed && (cur.lightUsed !== nl || (cur.illUsed || null) !== (c.ill || null)))); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   on('ciEdit', () => { editCI = true; history.pushState({ view: 'oggi', edit: 1 }, ''); render(); });
   on('ciCancel', () => { leaveEdit(); render(); });
@@ -801,15 +822,17 @@ function renderDiario() {
   for (let i = 0; i < 7; i++) {
     const d = E.addDays(mon, i); const x = E.parse(d); const p = S.plans[d]; const acts = S.activities[d] || []; const dn = dayDone(d);
     if (dn) { n++; min += dn.min; load += dn.load; if (dn.level >= 4) hard++; }
-    const cfg = S.profile.days[x.getDay()] || {};
+    const cfg = E.dayCfg(S, d);
     let icon = '<div class="sporticon" style="background:var(--s2);color:var(--mut)">' + ico('moon') + '</div>', title = 'Riposo', sub = '', stc = 'rest', stt = '';
     if (p && !p.rest) {
       const tp = E.TEMPLATES[p.tid]; icon = sportIcon(p.sport); title = p.freeName || tp.name; sub = E.SPORTS[p.sport].name + ' · ' + fmtMin(p.dur) + ' · ' + E.LEVELS[p.level];
       stc = p.status === 'done' ? 'done' : p.status === 'skipped' ? 'skip' : 'plan'; stt = p.status === 'done' ? 'Fatta' : p.status === 'skipped' ? 'Saltata' : d < t ? (icuOn() ? 'Non fatta' : 'Non segnata') : 'Da fare';
     } else if (acts.length) {
       icon = sportIcon(acts[0].sport === 'other' ? 'road' : acts[0].sport); title = acts[0].name; sub = fmtMin(acts.reduce((s, y) => s + y.min, 0)) + ' · da Intervals.icu'; stc = 'done'; stt = 'Fatta';
+    } else if (d > t && cfg.special === 'off') {
+      title = 'Impegno'; sub = 'giorno speciale · niente allenamento'; stc = 'skip'; stt = 'Speciale';
     } else if (d > t && cfg.on) {
-      icon = '<div class="sporticon" style="background:var(--s2);color:var(--mut)">' + ico('cal') + '</div>'; title = cfg.long ? 'Giorno lungo' : 'Allenamento'; sub = 'fino a ' + fmtMin(cfg.max); stc = 'plan'; stt = 'In arrivo';
+      icon = '<div class="sporticon" style="background:var(--s2);color:var(--mut)">' + ico('cal') + '</div>'; title = cfg.long ? 'Giorno lungo' : 'Allenamento'; sub = 'fino a ' + fmtMin(cfg.max) + (cfg.special ? ' · giorno speciale' : ''); stc = 'plan'; stt = cfg.special ? 'Speciale' : 'In arrivo';
     } else if (d < t && cfg.on) { title = 'Nessuna attività'; }
     if (p && !p.rest && acts.length && p.status === 'done') sub += ' · ✓ Intervals';
     rows += '<button class="day' + (d === t ? ' today' : '') + '" data-day="' + d + '"><div class="dn"><small>' + GG[x.getDay()].slice(0, 3) + '</small><b>' + x.getDate() + '</b></div>' + icon +
@@ -837,6 +860,7 @@ function renderDiario() {
   document.querySelectorAll('[data-day]').forEach(b => b.onclick = () => {
     const d = b.dataset.day; const p = S.plans[d];
     if (d === t) { go('oggi'); return; }
+    if (d > t) { openSpecialSheet(d); return; }
     if (!p || p.rest) return;
     let extra = '';
     if (d < t) extra = '<div class="row" style="margin-top:4px"><button class="btn" data-set="done">' + ico('check') + 'Fatta</button><button class="btn" data-set="skipped">' + ico('x') + 'Saltata</button></div>';
@@ -922,7 +946,7 @@ function renderProfilo() {
     '<br><span style="color:var(--t2)">Ultimo backup: ' + (S.lastBackup ? new Date(S.lastBackup).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }) : 'mai') + '</span></div>' +
     '<div class="row"><button class="btn" id="bExp">Esporta backup</button><button class="btn" id="bImp">Importa</button></div><input type="file" id="bFile" accept="application/json" hidden>' +
     '<button class="btn ghost sm full" id="bReset" style="margin-top:8px;color:var(--red)">Azzera tutto</button></div>' +
-    blockCardHTML() +
+    specialCardHTML() + blockCardHTML() +
     '<div class="card"><h3>Guida rapida</h3><div class="t2" style="font-size:14px;margin-bottom:10px">Come funziona SMG, funzione per funzione.</div><button class="btn full" id="guideOpen">Apri la guida</button></div>' +
     '<div class="foot">SMG · スドマゴド · v1.2</div>';
 
@@ -957,6 +981,8 @@ function bindProfilo() {
   g('lHere').onclick = locate;
   g('pIndoorMax').onchange = e => { P.indoorMax = +e.target.value; P.indoorMaxSet = true; changed(); };
   g('guideOpen').onclick = openGuide;
+  g('spAdd').onclick = () => openSpecialSheet();
+  document.querySelectorAll('[data-spedit]').forEach(b => b.onclick = () => openSpecialSheet(b.dataset.spedit));
   const setAnchor = (d, msg) => { P.deloadAnchor = d; delete P.blockShift; save(); toast(msg); render(); };
   const curMon = E.monday(today());
   g('blkEarly').onclick = () => { const nd = E.nextDeload(P, today()); const d = E.addDays(nd, -7); if (d < curMon) { toast('Lo scarico è già questa settimana'); return; } setAnchor(d, 'Scarico anticipato di una settimana'); };
@@ -1005,6 +1031,7 @@ const GUIDE = [
     <li><b>Sonno</b>: il punteggio del Fenix; sotto 65 pesa sul semaforo.</li>
     <li><b>Forma</b>: fitness meno fatica, da Intervals. La linea tratteggiata è lo zero: sopra sei fresco, molto sotto hai carico accumulato.</li></ul>
     <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>
+    <p><b>Malanno</b> (nel check-in): con raffreddore o mal di gola solo sedute facili e più corte; con febbre o dolori diffusi riposo. Segnalo ogni giorno finché dura: dopo, 2-3 giorni di rientro graduale prima della qualità.</p>
     <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati. In <b>Come è calcolato il punteggio</b> trovi il contributo di ogni voce.</p>`],
   ['bolt', 'La seduta del giorno', `<ul><li><b>Rilancia</b>: un'alternativa equivalente, se quella proposta non ti ispira.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
@@ -1021,7 +1048,7 @@ const GUIDE = [
     <li>Sui rulli al massimo 70 minuti (si cambia nel Profilo, sotto "La tua settimana").</li>
     <li>Evita le sedute fatte di recente e lo sport di ieri. Ogni 7 settimane propone il test FTP.</li>
     <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
-    <p>Le etichette sotto la seduta spiegano il perché della scelta.</p>`],
+    <p>Le etichette sotto la seduta spiegano il perché della scelta. Nelle sedute oltre 90 minuti (75 di corsa) trovi anche le indicazioni di <b>rifornimento</b>, adattate al meteo.</p>`],
   ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>
     <p>Nel Profilo, in <b>Blocchi e scarico</b>, vedi quando arriva il prossimo scarico e puoi <b>anticiparlo</b>, <b>posticiparlo</b> o farlo partire <b>da questa settimana</b> (ferie, lavoro pesante, trasferte).</p>
     <p>Il <b>lunedì</b> (e il martedì, finché non lo chiudi) in cima a Oggi trovi il riepilogo della settimana appena chiusa: sedute, tempo, sedute dure, variazione della fitness e cosa ti aspetta.</p>`],
@@ -1034,7 +1061,8 @@ const GUIDE = [
   ['user', 'Profilo', `<ul><li><b>Test FTP</b>: dopo il test aggiorna l'FTP su Intervals; SMG lo riconosce e riparte il conteggio delle 7 settimane.</li>
     <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Tempi da concordare con chi ti segue.</li>
     <li><b>La tua settimana</b>: giorni attivi, giorni lunghi e durata massima di ciascuno.</li>
-    <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri.</li></ul>`],
+    <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>
+    <li><b>Giorni speciali</b>: per una data precisa segni un impegno (niente allenamento) o un tempo diverso dal solito, anche in un giorno di solito libero. Si aggiungono qui o toccando un giorno futuro nel Diario; l'app ne tiene conto anche nell'anteprima e nella distribuzione delle sedute dure.</li></ul>`],
   ['save', 'Backup e cambio telefono', `<p>Le sedute inviate e i dati di salute si recuperano da Intervals (ultimi 60 giorni). Giorni, sport, località e check-in a mano vivono solo sul telefono: <b>Esporta backup</b> una volta al mese (te lo ricorda l'app). Su un telefono nuovo: installa SMG, <b>Importa</b> il backup e reincolla la chiave di Intervals.</p>`],
   ['wrench', 'Se qualcosa non va', `<ul><li><b>App non aggiornata</b>: chiudila del tutto e riaprila, anche due volte.</li>
     <li><b>Seduta non arriva sull'orologio</b>: controlla nel Profilo che Intervals sia collegato (pallino verde) e sincronizza Garmin Connect.</li>
@@ -1098,6 +1126,41 @@ function openFriendsSheet(d) {
         S.plans[d] = np; save(); syncPushState(np); closeSheet(); toast('Buona uscita!'); render();
       };
     });
+}
+// Giorni speciali: eccezioni alla settimana tipo per una data precisa
+function openSpecialSheet(date) {
+  const t = today(); date = date || E.addDays(t, 1);
+  S.special = S.special || {};
+  const cur = S.special[date];
+  const base = S.profile.days[E.dow(date)] || { on: false, max: 60 };
+  let type = cur ? cur.type : (base.on ? 'off' : 'on'), max = cur && cur.max || base.max || 60, long = cur ? !!cur.long : !!base.long, dsel = date;
+  const draw = () => {
+    const chip = (attr, val, on, lab) => '<button class="chip' + (on ? ' on' : '') + '" data-' + attr + '="' + val + '">' + lab + '</button>';
+    const b0 = S.profile.days[E.dow(dsel)] || { on: false };
+    document.getElementById('spBody').innerHTML =
+      '<div class="field"><label>Giorno</label><input type="date" id="spDate" min="' + t + '" value="' + dsel + '"></div>' +
+      '<div class="mut" style="font-size:12.5px;margin:6px 2px 0">Di solito: ' + (b0.on ? (b0.long ? 'giorno lungo' : 'allenamento') + ', fino a ' + fmtMin(b0.max) : 'riposo') + '</div>' +
+      '<div class="ctl"><div class="lab">Quel giorno</div><div class="chips" style="flex-wrap:wrap">' + chip('spt', 'off', type === 'off', 'Impegnato, niente allenamento') + chip('spt', 'on', type === 'on', 'Posso allenarmi') + '</div>' +
+      (type === 'on' ? '<div class="lab">Tempo a disposizione</div><div class="chips" style="flex-wrap:wrap">' + [30, 45, 60, 75, 90, 120, 150, 180, 240].map(m => chip('spm', m, m === max, fmtMin(m))).join('') + '</div>' +
+        '<label class="check" style="margin-top:4px"><span class="switch"><input type="checkbox" id="spLong"' + (long ? ' checked' : '') + '><i></i></span>Giorno lungo (fondo e uscite lunghe)</label>' : '') + '</div>';
+    document.getElementById('spDate').onchange = e => { if (e.target.value >= t) { dsel = e.target.value; const c2 = S.special[dsel]; if (c2) { type = c2.type; max = c2.max || max; long = !!c2.long; } draw(); } };
+    document.querySelectorAll('[data-spt]').forEach(b => b.onclick = () => { type = b.dataset.spt; draw(); });
+    document.querySelectorAll('[data-spm]').forEach(b => b.onclick = () => { max = +b.dataset.spm; if (max >= 90 && !long && E.dow(dsel) % 6 === 0) long = true; draw(); });
+    const lg = document.getElementById('spLong'); if (lg) lg.onchange = e => { long = e.target.checked; };
+  };
+  const after = d => { save(); closeSheet(); if (d === today()) { const np = planFor(d, true); syncPushState(np); } render(); };
+  openSheet('<div class="guide"><h2>Giorno speciale</h2><p class="intro">Per una data precisa: un impegno, una trasferta, oppure un giorno in cui hai più o meno tempo del solito. Vale solo per quel giorno.</p><div id="spBody"></div>' +
+    '<button class="btn hot full" id="spSave" style="margin-top:12px">Salva</button>' + (cur ? '<button class="btn ghost full" id="spDel" style="margin-top:6px">Torna come al solito</button>' : '') + '</div>', () => {
+      draw();
+      document.getElementById('spSave').onclick = () => { S.special[dsel] = type === 'off' ? { type: 'off' } : { type: 'on', max, long }; toast('Giorno speciale salvato'); after(dsel); };
+      const del = document.getElementById('spDel'); if (del) del.onclick = () => { delete S.special[date]; toast('Torna come al solito'); after(date); };
+    });
+}
+function specialCardHTML() {
+  const t = today(); const list = Object.keys(S.special || {}).filter(d => d >= t).sort();
+  return '<div class="card"><h3>Giorni speciali</h3><div class="mut" style="font-size:12.5px;margin-bottom:6px">Impegni, trasferte o giorni con un tempo diverso dal solito. Anche dal Diario: tocca un giorno futuro.</div>' +
+    (list.length ? list.map(d => { const x = S.special[d]; return '<div class="set"><div class="l"><b>' + longDate(d) + '</b><small>' + (x.type === 'off' ? 'Impegno, niente allenamento' : 'Allenamento fino a ' + fmtMin(x.max) + (x.long ? ', giorno lungo' : '')) + '</small></div><button class="btn sm" data-spedit="' + d + '">Modifica</button></div>'; }).join('') : '<div class="t2" style="font-size:14px;padding:6px 0">Nessuno in programma.</div>') +
+    '<button class="btn full" id="spAdd" style="margin-top:8px">' + ico('cal') + 'Aggiungi un giorno</button></div>';
 }
 function openSkipSheet(d) {
   const p = S.plans[d]; if (!p) return;

@@ -468,6 +468,8 @@ function readiness(checkins, date) {
     add('Forma', (t > 0 ? '+' : '') + t, pts);
   }
   if (c.pain) { add('Dolori', 'sì', -15); why.push('qualche dolore'); }
+  if (c.ill === 'neck') { add('Malanno', 'raffreddore o gola', -10); why.push('raffreddore o mal di gola'); }
+  if (c.ill === 'body') { add('Malanno', 'febbre o dolori diffusi', -35); why.push('febbre o malessere'); }
   s = clamp(Math.round(s), 5, 100);
   const own = s;
   if (c.garmin) {                                   // Prontezza Garmin, se inserita: media 50/50
@@ -550,6 +552,14 @@ function nextDeload(profile, date) {
 /* Scelta della seduta                                                 */
 /* ------------------------------------------------------------------ */
 function sportAllowed(profile, s) { return !!profile.sports[s]; }
+// impostazione del giorno: settimana tipo, oppure eccezione per quella data (state.special)
+function dayCfg(state, date) {
+  const base = state.profile.days[dow(date)] || { on: false, max: 60 };
+  const sp = state.special && state.special[date];
+  if (!sp) return base;
+  if (sp.type === 'off') return { on: false, max: 0, long: false, special: 'off' };
+  return { on: true, max: sp.max || base.max || 60, long: !!sp.long, special: 'on' };
+}
 function templateOk(t, sport, profile, dayLong) {
   if (t.manual) return false;
   if (!t.sports.includes(sport)) return false;
@@ -600,8 +610,10 @@ function weatherBad(w) {
 function propose(state, date, opts) {
   opts = opts || {};
   const P = state.profile; const w = dow(date);
-  const cfg = P.days[w] || { on: false, max: 60 };
-  if (!cfg.on && !opts.extra) return { date, rest: true, reasons: ['Oggi è giorno di riposo'] };
+  const cfg = dayCfg(state, date);
+  if (!cfg.on && !opts.extra) return { date, rest: true, special: cfg.special, reasons: [cfg.special === 'off' ? 'Oggi hai segnato un impegno: niente allenamento' : 'Oggi è giorno di riposo'] };
+  const ci = state.checkins[date] || {};
+  if (ci.ill === 'body' && !opts.forceSport && !opts.extra) return { date, rest: true, illRest: true, reasons: ['Febbre o malessere diffuso: oggi solo riposo'] };
 
   const dayLong = !!cfg.long && !opts.extra;
   const dayMax = opts.extra ? Math.min(60, cfg.max || 60) : cfg.max;
@@ -627,6 +639,15 @@ function propose(state, date, opts) {
   else if (ctx.yesterday && ctx.yesterday.level === 3 && ctx.twoAgo && ctx.twoAgo.level >= 3) maxL = Math.min(maxL, 2);
   if (ctx.weekHard >= 2) { maxL = Math.min(maxL, 3); if (maxL === 3) reasons.push('Già due sedute dure questa settimana'); }
   if ((w === 6 || w === 0) && ctx.blockHard >= 1) maxL = Math.min(maxL, 3);
+  // malanno: oggi o nei giorni scorsi
+  let illCap = 5, illNote = null;
+  if (ci.ill === 'neck') { illCap = 2; illNote = 'Raffreddore o gola: solo una seduta facile'; }
+  else for (let k = 1; k <= 3; k++) {
+    const pc = state.checkins[addDays(date, -k)];
+    if (pc && pc.ill === 'body') { illCap = k <= 2 ? 2 : 3; illNote = 'Rientro dopo il malanno (giorno ' + k + '): con calma'; break; }
+    if (pc && pc.ill === 'neck') { if (k === 1) { illCap = 3; illNote = 'Ieri raffreddato: niente sedute dure'; } break; }
+  }
+  if (illCap < maxL) { maxL = illCap; reasons.push(illNote); }
   if (fb.tired && maxL > 3) { maxL = 3; reasons.push('Le ultime sedute ti sono sembrate più dure del previsto: oggi niente fuorigiri'); }
   if (opts.extra) maxL = Math.min(maxL, 2);
 
@@ -719,6 +740,7 @@ function propose(state, date, opts) {
   if (!deload && bw > 0 && !tpl.test) reasons.push('Settimana ' + (bw + 1) + ' di 3 del blocco: un gradino in più');
   if (fb.easy && !deload) reasons.push('Le ultime sedute ti sono sembrate facili: alziamo un po\' l\'asticella');
   if (fb.tired) dur = round5(Math.max(tpl.dur[0], dur * 0.9));
+  if (ci.ill === 'neck') dur = round5(Math.max(tpl.dur[0], dur * 0.8));
   if (deload) dur = round5(Math.max(tpl.dur[0], dur * 0.75));
   if (opts.forceTid && tpl.id === opts.forceTid) reasons.push('Versione rulli della seduta di oggi');
   if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.min(Math.max(opts.forceDur, 30), P.indoorMax || 70) : opts.forceDur));
@@ -891,6 +913,6 @@ root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
   defaultProfile, readiness, propose, indoorVersion, build, stats, profileBars, targetText,
-  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload
+  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg
 };
 })(typeof window !== 'undefined' ? window : globalThis);
