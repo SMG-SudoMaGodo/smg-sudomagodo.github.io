@@ -303,8 +303,8 @@ const T = [
   { id: 'ftp_test', name: 'Test FTP 20 minuti', level: 5, sports: ['indoor', 'road'], dur: [60, 75], test: true,
     desc: 'Il test per aggiornare le zone: 20 minuti al massimo costante, misurati con gli Stages. FTP = 95% della potenza media dei 20 minuti. Parti prudente e chiudi forte.',
     setup: {
-      indoor: ['Potenza dagli Stages: sul Fenix è già così; su MyWhoosh, se puoi, mettili come sorgente primaria per il test.',
-        'Per i 20 minuti spegni l\'ERG su MyWhoosh: decidi tu lo sforzo con i rapporti.',
+      indoor: ['Conta la potenza degli Stages letta dal Fenix. Su MyWhoosh lascia tutto com\'è: il Tacx resta la sorgente primaria.',
+        'Per i 20 minuti spegni l\'ERG su MyWhoosh: il Tacx fa solo da resistenza e decidi tu lo sforzo con i rapporti, guardando i watt sul Fenix.',
         'Sul Fenix premi Lap all\'inizio e alla fine dei 20 minuti: lì leggi potenza e FC media.'],
       road: ['Usa la bici da strada con gli Stages, su una salita lunga e regolare o un rettilineo senza incroci.',
         'Premi Lap all\'inizio e alla fine dei 20 minuti: lì leggi potenza e FC media.']
