@@ -387,8 +387,8 @@ function defaultProfile(today) {
     ftp: 225, weight: 67, lthr: 164, thrPace: 248, age: 46,
     sports: { indoor: true, mtb: true, road: true, run: false, strength: true },
     runStage: 1,                       // 1 cammino/corsa · 2 corsa facile · 3 completo
-    days: { 1: { on: true, max: 75 }, 2: { on: false, max: 60 }, 3: { on: true, max: 75 }, 4: { on: false, max: 60 },
-            5: { on: true, max: 150, long: true }, 6: { on: true, max: 150, long: true }, 0: { on: true, max: 150, long: true } },
+    days: { 1: { on: true, max: 75, at: '18:00' }, 2: { on: false, max: 60, at: '18:00' }, 3: { on: true, max: 75, at: '18:00' }, 4: { on: false, max: 60, at: '18:00' },
+            5: { on: true, max: 150, long: true, at: '15:00' }, 6: { on: true, max: 150, long: true, at: '09:00' }, 0: { on: true, max: 150, long: true, at: '09:00' } },
     lastTest: today,                   // ultimo test FTP (prossimo dopo ~7 settimane)
     indoorMax: 70,
     start: today
@@ -616,9 +616,46 @@ function durRange(t, sport, dayLong, dayMax, light, level, profile) {
   return [lo, hi];
 }
 
-function weatherBad(w) {
+// orario abituale del giorno (minuti dalla mezzanotte)
+const DEF_AT = { 0: '09:00', 1: '18:00', 2: '18:00', 3: '18:00', 4: '18:00', 5: '15:00', 6: '09:00' };
+function startMin(profile, date) {
+  const d = profile.days[dow(date)] || {}; const m = String(d.at || DEF_AT[dow(date)]).match(/^(\d{1,2}):(\d{2})$/);
+  return m ? +m[1] * 60 + +m[2] : 18 * 60;
+}
+// alba e tramonto (minuti, ora locale): da Open-Meteo se c'è, altrimenti calcolati dalla località
+function sunMin(date, lat, lon) {
+  const x = parse(date); const n = Math.round((x - new Date(x.getFullYear(), 0, 0)) / 864e5);
+  const g = 2 * Math.PI / 365 * (n - 1);
+  const eq = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  const dec = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const r = lat * Math.PI / 180;
+  const ha = Math.acos(Math.cos(90.833 * Math.PI / 180) / (Math.cos(r) * Math.cos(dec)) - Math.tan(r) * Math.tan(dec)) * 180 / Math.PI;
+  const tz = -new Date(x.getFullYear(), x.getMonth(), x.getDate(), 12).getTimezoneOffset();
+  return { rise: Math.round(720 - 4 * (lon + ha) - eq + tz), set: Math.round(720 - 4 * (lon - ha) - eq + tz) };
+}
+function daylight(state, date, w) {
+  const hm = t => { const m = String(t || '').match(/T(\d{2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
+  if (w && w.sunset) { const a = hm(w.sunrise), b = hm(w.sunset); if (a != null && b != null) return { rise: a, set: b }; }
+  if (state.loc && state.loc.lat != null) return sunMin(date, +state.loc.lat, +state.loc.lon);
+  return null;
+}
+const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Math.round(m % 60)).padStart(2, '0');
+// meteo nelle ore in cui esci (se ci sono i dati orari), altrimenti della giornata
+function slotWx(w, at, dur) {
+  if (!w || !w.hp) return null;
+  const h0 = Math.floor(at / 60), h1 = Math.min(23, Math.floor((at + (dur || 90)) / 60));
+  let rain = 0, temp = null;
+  for (let h = h0; h <= h1; h++) { rain = Math.max(rain, w.hp[h] || 0); if (w.ht && w.ht[h] != null) temp = temp == null ? w.ht[h] : Math.min(temp, w.ht[h]); }
+  return { rain, temp };
+}
+function weatherBad(w, slot) {
   if (!w) return 0;
   let bad = 0;
+  if (slot) {
+    if (slot.rain >= 60) bad = 2; else if (slot.rain >= 40 || w.mm >= 8) bad = 1;
+    if (slot.temp != null && slot.temp < 4) bad = Math.max(bad, 1);
+    return bad;
+  }
   if (w.rain >= 60 || w.mm >= 3) bad = 2; else if (w.rain >= 40) bad = 1;
   if (w.tmax != null && w.tmax < 4) bad = Math.max(bad, 1);
   return bad;
@@ -695,7 +732,15 @@ function propose(state, date, opts) {
   if (testDue) level = 5;
 
   /* --- meteo --- */
-  const wx = opts.weather; const bad = weatherBad(wx);
+  const wx = opts.weather;
+  const at = startMin(P, date), estDur = opts.forceDur || Math.round((dayMax || 60) * 0.85);
+  const slot = slotWx(wx, at, estDur);
+  const bad = weatherBad(wx, slot);
+  // luce: buio già alla partenza, oppure rientro dopo il tramonto (oltre il crepuscolo)
+  const sun = daylight(state, date, wx);
+  const dark = !!sun && (at >= sun.set - 10 || at < sun.rise);
+  const dusk = !!sun && !dark && at + estDur > sun.set + 20;
+  const coldSlot = slot && slot.temp != null ? slot.temp : wx && wx.tmax != null ? wx.tmax - 3 : null;
 
   /* --- sport --- */
   const m = month(date); const winter = m >= 10 || m <= 3;
@@ -718,6 +763,12 @@ function propose(state, date, opts) {
     if (s === 'indoor' && opts.forceDur && opts.forceDur > (P.indoorMax || 70)) x *= 0.1;   // più tempo del massimo sui rulli: meglio fuori
     if (s === 'run' && bad === 2) x *= 0.5;
     if (wx && wx.wind >= 40 && s === 'road') x *= 0.5;
+    // col buio: strada quasi mai; MTB con le luci ogni tanto, solo se asciutto e non troppo freddo
+    if (dark) {
+      if (s === 'road') x *= 0.02;
+      if (s === 'mtb') x *= (bad >= 1 || (coldSlot != null && coldSlot < 5) || (wx && wx.wind >= 35)) ? 0.03 : 0.25;
+      if (s === 'run') x *= 0.7;
+    } else if (dusk && (s === 'road' || s === 'mtb')) x *= s === 'road' ? 0.5 : 0.85;
     if (ctx.recent[0] === s) x *= 0.55;
     if (ctx.recent[0] === s && ctx.recent[1] === s) x *= 0.5;
     if (s === 'run') {
@@ -775,8 +826,13 @@ function propose(state, date, opts) {
   if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.min(Math.max(opts.forceDur, 30), P.indoorMax || 70) : opts.forceDur));
 
   /* --- motivi e sfida --- */
-  if (bad === 2 && sport === 'indoor') reasons.push('Pioggia prevista: meglio i rulli');
-  else if (bad === 1 && sport === 'indoor') reasons.push('Meteo incerto: rulli al riparo');
+  const atTxt = slot ? ' alle ' + hhmm(at) : '';
+  if (bad === 2 && sport === 'indoor') reasons.push('Pioggia prevista' + atTxt + ': meglio i rulli');
+  else if (bad === 1 && sport === 'indoor') reasons.push('Meteo incerto' + atTxt + ': rulli al riparo');
+  else if (dark && sport === 'indoor') reasons.push('Alle ' + hhmm(at) + ' è già buio (tramonto ' + hhmm(sun.set) + '): rulli');
+  if (dark && (sport === 'mtb' || sport === 'road')) reasons.push('Si esce col buio: luci anteriore e posteriore cariche. Se non ti va, scegli Rulli');
+  else if (sun && !dark && at + dur > sun.set + 10 && (sport === 'mtb' || sport === 'road')) reasons.push('Tramonto alle ' + hhmm(sun.set) + ': per il rientro porta le luci');
+  if (dark && sport === 'run') reasons.push('Col buio: frontale o luce e qualcosa di riflettente');
   if (tpl.test) reasons.push(P.testSoon ? 'Test FTP chiesto da te: oggi sei fresco, aggiorniamo le zone' : blockWeek(P, date) === 0 ? 'Prima settimana dopo lo scarico: sei fresco, aggiorniamo le zone' : 'Sono passate più di 9 settimane dall\'ultimo test: aggiorniamo le zone');
   if (level >= 4 && ctx.weekHard === 0) reasons.push('Prima seduta intensa della settimana');
   if (dayLong && level === 2) reasons.push('Giorno lungo: accumula ore di fondo');
@@ -793,7 +849,7 @@ function propose(state, date, opts) {
   let extra = null;
   if (P.sports.strength && level <= 2 && !dayLong) extra = EXTRAS[Math.floor(r() * EXTRAS.length)].id;
 
-  return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload, step };
+  return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload, step, at: hhmm(at), dark, dusk: !!sun && !dark && at + dur > sun.set + 10 };
 }
 
 /* ------------------------------------------------------------------ */
@@ -942,6 +998,6 @@ root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
   defaultProfile, readiness, propose, indoorVersion, build, stats, profileBars, targetText,
-  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest
+  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
 };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -4,6 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
+const APP_V = '1.5';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -98,14 +99,16 @@ async function fetchWeather(force) {
   if (!S.loc) return false;
   if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()]) return false;
   const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon +
-    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max&hourly=precipitation_probability&timezone=auto&forecast_days=3';
+    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m&timezone=auto&forecast_days=3';
   try {
     const r = await fetch(u); if (!r.ok) throw 0; const j = await r.json(); const days = {};
     j.daily.time.forEach((d, i) => days[d] = { code: j.daily.weather_code[i], tmax: j.daily.temperature_2m_max[i], tmin: j.daily.temperature_2m_min[i],
-      rain: j.daily.precipitation_probability_max[i] || 0, mm: j.daily.precipitation_sum[i] || 0, wind: j.daily.wind_speed_10m_max[i] || 0 });
+      rain: j.daily.precipitation_probability_max[i] || 0, mm: j.daily.precipitation_sum[i] || 0, wind: j.daily.wind_speed_10m_max[i] || 0,
+      sunrise: j.daily.sunrise ? j.daily.sunrise[i] : null, sunset: j.daily.sunset ? j.daily.sunset[i] : null });
     // finestra di 3 ore più asciutta tra le 7 e le 19
     if (j.hourly && j.hourly.time) Object.keys(days).forEach(d => {
-      const pr = []; j.hourly.time.forEach((h, i) => { if (h.slice(0, 10) === d) pr[+h.slice(11, 13)] = j.hourly.precipitation_probability[i] || 0; });
+      const pr = [], tp = []; j.hourly.time.forEach((h, i) => { if (h.slice(0, 10) === d) { pr[+h.slice(11, 13)] = j.hourly.precipitation_probability[i] || 0; if (j.hourly.temperature_2m) tp[+h.slice(11, 13)] = Math.round(j.hourly.temperature_2m[i]); } });
+      days[d].hp = Array.from({ length: 24 }, (_, h) => pr[h] || 0); if (tp.length) days[d].ht = Array.from({ length: 24 }, (_, h) => tp[h] == null ? null : tp[h]);
       let best = null;
       for (let h = 7; h <= 16; h++) { const v = Math.max(pr[h] || 0, pr[h + 1] || 0, pr[h + 2] || 0); if (best == null || v < best.v) best = { h, v }; }
       if (best) days[d].win = best;
@@ -564,13 +567,14 @@ function restHTML(p) {
 const WXD = c => c <= 1 ? 'Sereno' : c === 2 ? 'Poco nuvoloso' : c === 3 ? 'Nuvoloso' : c <= 48 ? 'Nebbia' : c <= 57 ? 'Pioviggine' : c <= 67 ? 'Pioggia' : c <= 77 ? 'Neve' : c <= 82 ? 'Rovesci' : c <= 86 ? 'Neve' : 'Temporale';
 const drop = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>';
 const wind = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/></svg>';
+const sunIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M17 18a5 5 0 0 0-10 0M12 9V2M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M16 5l-4 4-4-4"/></svg>';
 function wxDayHTML(d, label, cls) {
   const w = wxFor(d);
   if (!w) return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="desc" style="margin-top:10px">Previsioni non disponibili</div></div>';
   return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="main">' + wxIcon(w.code) +
     '<div><div class="tmax num">' + Math.round(w.tmax) + '°</div><div class="tmin num">' + Math.round(w.tmin) + '°</div></div></div>' +
     '<div class="desc">' + WXD(w.code) + '</div><div class="meta"><span style="color:' + (w.rain >= 50 ? 'var(--hot2)' : 'inherit') + '">' + drop + w.rain + '%' + (w.mm >= 0.5 ? ' · ' + Math.round(w.mm) + ' mm' : '') + '</span>' +
-    '<span>' + wind + Math.round(w.wind) + ' km/h</span></div></div>';
+    '<span>' + wind + Math.round(w.wind) + ' km/h</span>' + (w.sunset ? '<span title="Tramonto">' + sunIco + w.sunset.slice(11, 16) + '</span>' : '') + '</div></div>';
 }
 // seduta probabile di domani: stessa logica della proposta, come se oggi facessi la seduta prevista
 function tomorrowPreview(d) {
@@ -587,10 +591,13 @@ function planLine(d) {
     ? '<b>Domani probabile: ' + esc(E.TEMPLATES[pv.tid].name) + '</b> ' + sportTxt(pv.sport) + ', ' + fmtMin(pv.dur) + '.'
     : '<b>Domani ' + (cfg.long ? 'giorno lungo' : 'allenamento') + ', fino a ' + fmtMin(cfg.max) + '.</b>';
   if (cfg.on && w) {
-    const bad = w.rain >= 60 || w.mm >= 3, meh = !bad && (w.rain >= 40 || w.tmax < 4);
+    const at = E.startMin(S.profile, t), sl = E.slotWx(w, at, (cfg.max || 60) * 0.85), atTxt = sl ? ' alle ' + Math.floor(at / 60) : '';
+    const bad = sl ? sl.rain >= 60 : w.rain >= 60 || w.mm >= 3, meh = !bad && (sl ? sl.rain >= 40 || (sl.temp != null && sl.temp < 4) : w.rain >= 40 || w.tmax < 4);
     const win = w.win && w.win.v <= 30 ? ' tra le ' + w.win.h + ' e le ' + (w.win.h + 3) : '';
-    if (bad) plan += pv && pv.sport === 'indoor' ? ' Pioggia probabile, per questo è sui rulli' + (win ? ': se preferisci uscire, la finestra più asciutta è' + win + '.' : '.') : win ? ' Pioggia probabile, ma' + win + ' dovrebbe reggere.' : ' Pioggia probabile: tieni pronti i rulli.';
-    else if (meh) plan += ' Tempo incerto' + (w.win && w.win.v < w.rain ? ': meglio uscire tra le ' + w.win.h + ' e le ' + (w.win.h + 3) + '.' : ', tieni pronti i rulli.');
+    if (pv && pv.dark && pv.sport === 'indoor' && !bad && !meh) plan += ' Alle ' + pv.at + ' sarà già buio: per questo è sui rulli.';
+    else if (pv && pv.dark && (pv.sport === 'mtb' || pv.sport === 'road')) plan += ' Si esce col buio: carica le luci.';
+    else if (bad) plan += pv && pv.sport === 'indoor' ? ' Pioggia probabile' + atTxt + ', per questo è sui rulli' + (win ? ': se preferisci uscire, la finestra più asciutta è' + win + '.' : '.') : win ? ' Pioggia probabile, ma' + win + ' dovrebbe reggere.' : ' Pioggia probabile: tieni pronti i rulli.';
+    else if (meh) plan += ' Tempo incerto' + atTxt + (w.win && w.win.v < w.rain ? ': meglio uscire tra le ' + w.win.h + ' e le ' + (w.win.h + 3) + '.' : ', tieni pronti i rulli.');
     else if (w.wind >= 35) plan += ' Asciutto ma ventoso: meglio la MTB nel bosco.';
     else if (!pv || pv.sport !== 'indoor') plan += ' Si preannuncia una bella giornata per uscire.';
   }
@@ -907,6 +914,7 @@ function blockCardHTML() {
     '<div class="mut" style="font-size:12.5px;margin:4px 0 10px">Sposta lo scarico su una settimana di ferie, di lavoro pesante o di trasferta. Vale dalla prossima proposta; quella di oggi resta.</div>' +
     '<div class="row"><button class="btn sm" id="blkEarly">Anticipa</button><button class="btn sm" id="blkLate">Posticipa</button><button class="btn sm" id="blkNow"' + (bw === 3 ? ' disabled style="opacity:.4"' : '') + '>Da questa settimana</button></div></div>';
 }
+const AT_OPTS = Array.from({ length: 31 }, (_, i) => String(6 + Math.floor(i / 2)).padStart(2, '0') + (i % 2 ? ':30' : ':00'));
 function renderProfilo() {
   const P = S.profile;
   const pace = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -938,8 +946,9 @@ function renderProfilo() {
     const c = P.days[g] || { on: false, max: 60 };
     return '<div class="dayset"><b>' + cap(GG[g].slice(0, 3)) + '</b>' + sw('d_on_' + g, c.on) +
       '<select id="d_type_' + g + '"' + (c.on ? '' : ' class="off"') + '><option value="0"' + (!c.long ? ' selected' : '') + '>Normale</option><option value="1"' + (c.long ? ' selected' : '') + '>Lungo</option></select>' +
-      '<select id="d_max_' + g + '"' + (c.on ? '' : ' class="off"') + '>' + [45, 60, 75, 90, 105, 120, 150, 180].map(m => '<option value="' + m + '"' + (c.max === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div>';
-  }).join('') + '<div class="mut" style="font-size:12.5px;margin-top:8px">Durata massima per giorno. Ogni quarta settimana è di scarico.</div>' +
+      '<select id="d_max_' + g + '"' + (c.on ? '' : ' class="off"') + '>' + [45, 60, 75, 90, 105, 120, 150, 180].map(m => '<option value="' + m + '"' + (c.max === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select>' +
+      '<select id="d_at_' + g + '"' + (c.on ? '' : ' class="off"') + '>' + AT_OPTS.map(a => '<option' + ((c.at || E.DEF_AT[g]) === a ? ' selected' : '') + '>' + a + '</option>').join('') + '</select></div>';
+  }).join('') + '<div class="mut" style="font-size:12.5px;margin-top:8px">Tipo, durata massima e ora in cui esci di solito. Con l\'ora SMG sa se fuori sarà già buio e guarda il meteo di quelle ore. Ogni quarta settimana è di scarico.</div>' +
     '<div class="set" style="margin-top:6px;border-top:1px solid var(--line)"><div class="l"><b>Massimo sui rulli</b><small>Vale per tutte le sedute indoor</small></div><div class="v"><select id="pIndoorMax">' +
     [45, 60, 70, 75, 90, 105, 120].map(m => '<option value="' + m + '"' + ((P.indoorMax || 70) === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div></div>' +
     '<div class="set"><div class="l"><b>Tacx e Stages</b><small>' + esc(tacxText(P.ftp) || 'Confronta una volta i watt medi di una seduta su MyWhoosh e sul Fenix') + '</small></div><button class="btn sm" id="pTacx">' + (P.tacx ? 'Rifai' : 'Confronta') + '</button></div></div>';
@@ -956,7 +965,7 @@ function renderProfilo() {
     (S.icu.ok ? '<button class="btn" id="iSync">' + ico('sync', busy.sync ? 'spin' : '') + 'Aggiorna</button>' : '') + '</div>' +
     (S.icu.ok ? '<button class="btn ghost sm full" id="iOff" style="margin-top:8px">Scollega</button>' : '') + '</div>';
 
-  h += '<div class="card"><h3>Meteo</h3><div class="set"><div class="l"><b>' + esc(S.loc ? S.loc.name : 'Nessuna località') + '</b><small>Con pioggia o freddo la proposta va sui rulli</small></div><button class="btn sm" id="lHere">' + ico('pin') + 'Qui</button></div>' +
+  h += '<div class="card"><h3>Meteo</h3><div class="set"><div class="l"><b>' + esc(S.loc ? S.loc.name : 'Nessuna località') + '</b><small>Con pioggia, freddo o buio nelle tue ore la proposta va sui rulli</small></div><button class="btn sm" id="lHere">' + ico('pin') + 'Qui</button></div>' +
     '<div class="row" style="margin-top:6px"><input id="lQ" placeholder="Cerca un comune…"><button class="btn" id="lFind" style="flex:none">Cerca</button></div><div class="results" id="lRes"></div></div>';
 
   h += '<div class="card"><h3>Dati</h3><div class="mut" style="font-size:13px;margin-bottom:10px">Tutto resta nel telefono. Fai un backup una volta al mese (la chiave API non viene esportata).' +
@@ -966,7 +975,7 @@ function renderProfilo() {
     '<button class="btn ghost sm full" id="bReset" style="margin-top:8px;color:var(--red)">Azzera tutto</button></div>' +
     specialCardHTML() + blockCardHTML() +
     '<div class="card"><h3>Guida rapida</h3><div class="t2" style="font-size:14px;margin-bottom:10px">Come funziona SMG, funzione per funzione.</div><button class="btn full" id="guideOpen">Apri la guida</button></div>' +
-    '<div class="foot">SMG · スドマゴド · v1.4</div>';
+    '<div class="foot">SMG · スドマゴド · v' + APP_V + '</div>';
 
   $('#v-profilo').innerHTML = h;
   bindProfilo();
@@ -992,6 +1001,7 @@ function bindProfilo() {
     g('d_on_' + d).onchange = e => { c.on = e.target.checked; changed(); };
     g('d_type_' + d).onchange = e => { c.long = e.target.value === '1'; if (c.long && c.max < 90) c.max = 150; if (!c.long && c.max > 90) c.max = 75; changed(); };
     g('d_max_' + d).onchange = e => { c.max = +e.target.value; changed(); };
+    g('d_at_' + d).onchange = e => { c.at = e.target.value; changed(); };
   });
   g('iGo').onclick = async () => { S.icu.key = g('iKey').value.trim(); S.icu.athlete = g('iAth').value.trim() || '0'; save(); if (!S.icu.key) { toast('Incolla la chiave API'); return; } await icuConnect(); render(); };
   g('iAuto').onchange = e => { S.icu.auto = e.target.checked; save(); };
@@ -1073,7 +1083,9 @@ const GUIDE = [
   ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>
     <p>Nel Profilo, in <b>Blocchi e scarico</b>, vedi quando arriva il prossimo scarico e puoi <b>anticiparlo</b>, <b>posticiparlo</b> o farlo partire <b>da questa settimana</b> (ferie, lavoro pesante, trasferte).</p>
     <p>Il <b>lunedì</b> (e il martedì, finché non lo chiudi) in cima a Oggi trovi il riepilogo della settimana appena chiusa: sedute, tempo, sedute dure, variazione della fitness e cosa ti aspetta.</p>`],
-  ['cloud', 'Meteo e domani', `<p>La scheda in alto mostra oggi e domani, con la seduta probabile di domani e la finestra di 3 ore più asciutta se piove. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>`],
+  ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
+    <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
+    <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Tocca un giorno passato per vedere la seduta o segnarla.</li>
     <li><b>Andamento della forma</b>: fitness (azzurro) e fatica (rosa) delle ultime 8 settimane. Se la fitness sale, stai migliorando. Tocca il grafico per i valori del giorno.</li></ul>`],
   ['link', 'Intervals, Garmin, MyWhoosh', `<ul><li><b>SMG → Intervals → Garmin Connect → Fenix ed Edge</b>; e <b>Intervals → MyWhoosh</b> per le sedute indoor.</li>
@@ -1085,11 +1097,11 @@ const GUIDE = [
     <li><b>Test FTP</b>: ERG acceso per riscaldamento, allunghi e defaticamento; spento solo per i 20 minuti, in cui regoli lo sforzo con i rapporti guardando i watt sul Fenix. Lap all'inizio e alla fine dei 20 minuti: il risultato si legge lì. I test di Garmin e MyWhoosh hanno protocolli diversi: per confrontare i risultati nel tempo usa sempre quello di SMG.</li></ul>`],
   ['user', 'Profilo', `<ul><li><b>Test FTP</b>: vedi quando arriva il prossimo; <b>Anticipa</b> lo fa proporre al primo giorno verde di qualità. Dopo il test tocca <b>Inserisci il risultato</b> (anche dalla seduta): potenza media e FC media del Lap dei 20 minuti sul Fenix, cioè dagli Stages. SMG calcola l'FTP (95%), la scrive su Intervals.icu insieme alla FC di soglia e ti ricorda di aggiornare MyWhoosh e Garmin Connect. Se cambi l'FTP direttamente su Intervals, SMG lo prende come nuovo test.</li>
     <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Tempi da concordare con chi ti segue.</li>
-    <li><b>La tua settimana</b>: giorni attivi, giorni lunghi e durata massima di ciascuno.</li>
+    <li><b>La tua settimana</b>: giorni attivi, giorni lunghi, durata massima e ora in cui esci di solito (serve per buio e meteo).</li>
     <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>
     <li><b>Giorni speciali</b>: per una data precisa segni un impegno (niente allenamento) o un tempo diverso dal solito, anche in un giorno di solito libero. Si aggiungono qui o toccando un giorno futuro nel Diario; l'app ne tiene conto anche nell'anteprima e nella distribuzione delle sedute dure.</li></ul>`],
   ['save', 'Backup e cambio telefono', `<p>Le sedute inviate e i dati di salute si recuperano da Intervals (ultimi 60 giorni). Giorni, sport, località e check-in a mano vivono solo sul telefono: <b>Esporta backup</b> una volta al mese (te lo ricorda l'app). Su un telefono nuovo: installa SMG, <b>Importa</b> il backup e reincolla la chiave di Intervals.</p>`],
-  ['wrench', 'Se qualcosa non va', `<ul><li><b>App non aggiornata</b>: chiudila del tutto e riaprila, anche due volte.</li>
+  ['wrench', 'Se qualcosa non va', `<ul><li><b>Nuova versione</b>: quando è pronta compare in basso la barra <b>Aggiorna</b>: toccala e l'app si ricarica. Se non compare e il numero di versione in fondo al Profilo è vecchio, chiudi del tutto l'app e riaprila.</li>
     <li><b>Seduta non arriva sull'orologio</b>: controlla nel Profilo che Intervals sia collegato (pallino verde) e sincronizza Garmin Connect.</li>
     <li><b>Dati della notte mancanti</b>: guarda il riquadro sotto "Ultima sincronizzazione" nel Profilo, dice dove si ferma il dato.</li>
     <li><b>Installazione</b>: tocca Installa una sola volta e attendi la conferma.</li></ul>`]
@@ -1328,10 +1340,25 @@ boot();
 // chiede a Chrome di non cancellare i dati dell'app quando manca spazio
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist(); }); } catch (e) {}
 
+// aggiornamenti: quando è pronta una nuova versione compare la barra "Aggiorna"
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  const hadCtl = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // l'app installata resta aperta in background: al ritorno controlla se c'è una versione nuova
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    setInterval(() => reg.update().catch(() => {}), 3 * 3600e3);
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadCtl) showUpdate(); });
 }
+function showUpdate() {
+  if (document.getElementById('upd')) return;
+  const b = document.createElement('div'); b.id = 'upd'; b.className = 'upd';
+  b.innerHTML = '<span>Nuova versione di SMG pronta</span><button class="btn hot sm">Aggiorna</button>';
+  b.querySelector('button').onclick = () => { try { sessionStorage.setItem('smg-upd', '1'); } catch (e) {} location.reload(); };
+  document.body.appendChild(b);
+}
+try { if (sessionStorage.getItem('smg-upd')) { sessionStorage.removeItem('smg-upd'); setTimeout(() => toast('SMG aggiornata alla v' + APP_V), 600); } } catch (e) {}
 
 // per i test
-window.__smg = { get state() { return S; }, render, go, planFor, refreshToday };
+window.__smg = { get state() { return S; }, render, go, planFor, refreshToday, save, showUpdate };
 })();

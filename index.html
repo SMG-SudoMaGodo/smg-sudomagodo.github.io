@@ -257,10 +257,10 @@ details[open].steps summary svg{transform:rotate(180deg)}
 .set .l small{color:var(--mut);font-size:12.5px;display:block}
 .set .v{width:118px;flex:none}
 .set .v.w{width:150px}
-.dayset{display:grid;grid-template-columns:46px 1fr 96px 90px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.dayset{display:grid;grid-template-columns:34px auto 1fr 72px 72px;gap:6px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
 .dayset:first-of-type{border-top:0}
 .dayset b{font-size:14px}
-.dayset select{padding:8px 26px 8px 10px;font-size:13px;border-radius:10px;background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%}
+.dayset select{padding:8px 20px 8px 8px;font-size:13px;border-radius:10px;background-position:calc(100% - 11px) 50%,calc(100% - 6px) 50%}
 .dayset .off{opacity:.35;pointer-events:none}
 .help{font-size:13px;color:var(--t2);background:var(--s2);border-radius:14px;padding:12px 14px;margin:10px 0}
 .help ol{margin:6px 0 0;padding-left:18px}
@@ -287,6 +287,8 @@ nav button.on svg{color:var(--hot2)}
 .sheet .grab{width:44px;height:5px;border-radius:3px;background:var(--s3);margin:4px auto 12px}
 .toast{position:fixed;left:50%;bottom:calc(96px + var(--safe-b));transform:translateX(-50%) translateY(20px);opacity:0;z-index:60;background:var(--text);color:var(--bg);padding:11px 18px;border-radius:14px;font-weight:600;font-size:14px;transition:.25s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.on{opacity:1;transform:translateX(-50%)}
+.upd{position:fixed;left:12px;right:12px;bottom:calc(88px + var(--safe-b));z-index:61;display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--card,#122036);border:1px solid var(--hot);border-radius:16px;padding:10px 10px 10px 16px;font-weight:600;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.upd .btn{flex:none}
 .spin{animation:rot 1s linear infinite} @keyframes rot{to{transform:rotate(360deg)}}
 </style>
 </head>
