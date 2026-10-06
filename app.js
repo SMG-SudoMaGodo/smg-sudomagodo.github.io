@@ -941,7 +941,8 @@ function renderProfilo() {
       '<select id="d_max_' + g + '"' + (c.on ? '' : ' class="off"') + '>' + [45, 60, 75, 90, 105, 120, 150, 180].map(m => '<option value="' + m + '"' + (c.max === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div>';
   }).join('') + '<div class="mut" style="font-size:12.5px;margin-top:8px">Durata massima per giorno. Ogni quarta settimana è di scarico.</div>' +
     '<div class="set" style="margin-top:6px;border-top:1px solid var(--line)"><div class="l"><b>Massimo sui rulli</b><small>Vale per tutte le sedute indoor</small></div><div class="v"><select id="pIndoorMax">' +
-    [45, 60, 70, 75, 90, 105, 120].map(m => '<option value="' + m + '"' + ((P.indoorMax || 70) === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div></div></div>';
+    [45, 60, 70, 75, 90, 105, 120].map(m => '<option value="' + m + '"' + ((P.indoorMax || 70) === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div></div>' +
+    '<div class="set"><div class="l"><b>Tacx e Stages</b><small>' + esc(tacxText(P.ftp) || 'Confronta una volta i watt medi di una seduta su MyWhoosh e sul Fenix') + '</small></div><button class="btn sm" id="pTacx">' + (P.tacx ? 'Rifai' : 'Confronta') + '</button></div></div>';
 
   const st = S.icu.ok ? '<div class="status ok"><i></i>Collegato' + (S.icu.name ? ' · ' + esc(S.icu.name) : '') + '</div>' : S.icu.key ? '<div class="status err"><i></i>Non collegato</div>' : '<div class="status"><i></i>Non collegato</div>';
   h += '<div class="card"><h3>Intervals.icu → Garmin e MyWhoosh</h3>' + st +
@@ -965,7 +966,7 @@ function renderProfilo() {
     '<button class="btn ghost sm full" id="bReset" style="margin-top:8px;color:var(--red)">Azzera tutto</button></div>' +
     specialCardHTML() + blockCardHTML() +
     '<div class="card"><h3>Guida rapida</h3><div class="t2" style="font-size:14px;margin-bottom:10px">Come funziona SMG, funzione per funzione.</div><button class="btn full" id="guideOpen">Apri la guida</button></div>' +
-    '<div class="foot">SMG · スドマゴド · v1.3</div>';
+    '<div class="foot">SMG · スドマゴド · v1.4</div>';
 
   $('#v-profilo').innerHTML = h;
   bindProfilo();
@@ -997,6 +998,7 @@ function bindProfilo() {
   if (g('iSync')) g('iSync').onclick = () => icuSync(false);
   if (g('iOff')) g('iOff').onclick = () => { S.icu = { key: '', athlete: '0', auto: S.icu.auto, name: '', last: 0, ok: false }; save(); render(); };
   g('lHere').onclick = locate;
+  g('pTacx').onclick = () => openTacxSheet();
   g('pIndoorMax').onchange = e => { P.indoorMax = +e.target.value; P.indoorMaxSet = true; changed(); };
   g('guideOpen').onclick = openGuide;
   g('spAdd').onclick = () => openSpecialSheet();
@@ -1077,6 +1079,10 @@ const GUIDE = [
   ['link', 'Intervals, Garmin, MyWhoosh', `<ul><li><b>SMG → Intervals → Garmin Connect → Fenix ed Edge</b>; e <b>Intervals → MyWhoosh</b> per le sedute indoor.</li>
     <li>Da Garmin a Intervals arrivano attività, sonno, HRV, FC a riposo e peso. FTP e soglie no.</li>
     <li>FTP, FC e passo di soglia SMG li legge da Intervals: <b>si cambiano lì</b> (e se vuoi anche su Garmin, per le zone dell'orologio).</li></ul>`],
+  ['indoor', 'Rulli e potenza', `<ul><li><b>Su MyWhoosh</b> il Tacx è l'unico misuratore e comanda l'ERG. Gli Stages non si collegano a MyWhoosh: restano solo sul <b>Fenix</b>, che registra la stessa seduta. Su Intervals tieni solo l'attività del Fenix (l'importazione da MyWhoosh è disattivata); su Strava tieni quella di MyWhoosh, per il dislivello virtuale.</li>
+    <li><b>Prima di ogni seduta</b> azzera gli Stages dal Fenix (Calibra, pedivella ferma in verticale). Ogni tanto calibra anche il Tacx dall'app Tacx.</li>
+    <li><b>Confronto Tacx / Stages</b>, una volta sola (Profilo → <b>Tacx e Stages</b>): dopo una seduta regolare scrivi i watt medi letti su MyWhoosh e sul Fenix. Entro il 3% non serve niente. Oltre, SMG ti dice quale FTP impostare su MyWhoosh (FTP × watt Tacx ÷ watt Stages), così in ERG pedali ai watt giusti; su Intervals e Garmin resta l'FTP vera. Rifallo solo se cambi qualcosa (batteria degli Stages, aggiornamento del Tacx).</li>
+    <li><b>Test FTP</b>: ERG acceso per riscaldamento, allunghi e defaticamento; spento solo per i 20 minuti, in cui regoli lo sforzo con i rapporti guardando i watt sul Fenix. Lap all'inizio e alla fine dei 20 minuti: il risultato si legge lì. I test di Garmin e MyWhoosh hanno protocolli diversi: per confrontare i risultati nel tempo usa sempre quello di SMG.</li></ul>`],
   ['user', 'Profilo', `<ul><li><b>Test FTP</b>: vedi quando arriva il prossimo; <b>Anticipa</b> lo fa proporre al primo giorno verde di qualità. Dopo il test tocca <b>Inserisci il risultato</b> (anche dalla seduta): potenza media e FC media del Lap dei 20 minuti sul Fenix, cioè dagli Stages. SMG calcola l'FTP (95%), la scrive su Intervals.icu insieme alla FC di soglia e ti ricorda di aggiornare MyWhoosh e Garmin Connect. Se cambi l'FTP direttamente su Intervals, SMG lo prende come nuovo test.</li>
     <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Tempi da concordare con chi ti segue.</li>
     <li><b>La tua settimana</b>: giorni attivi, giorni lunghi e durata massima di ciascuno.</li>
@@ -1089,7 +1095,7 @@ const GUIDE = [
     <li><b>Installazione</b>: tocca Installa una sola volta e attendi la conferma.</li></ul>`]
 ];
 const GI = {
-  check: I.check, bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>', tl: '<rect x="8" y="2" width="8" height="20" rx="3"/><circle cx="12" cy="7" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="17" r="1.5"/>',
+  check: I.check, indoor: I.indoor, bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>', tl: '<rect x="8" y="2" width="8" height="20" rx="3"/><circle cx="12" cy="7" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="17" r="1.5"/>',
   brain: '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>', stairs: '<path d="M3 20h5v-5h5v-5h5V5h3"/>',
   cloud: '<path d="M7 18a4.5 4.5 0 0 1-.5-9A6 6 0 0 1 18 8.5 4.5 4.5 0 0 1 17.5 18z"/>', cal: I.cal, link: I.link,
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>', save: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
@@ -1193,12 +1199,36 @@ function openSkipSheet(d) {
       document.getElementById('altNone').onclick = () => { p.altExtra = null; save(); closeSheet(); render(); };
     });
 }
+// Tacx (MyWhoosh, ERG) e Stages (Fenix) possono leggere watt diversi: oltre il 3% l'FTP su MyWhoosh va corretta
+function tacxRatio() { const t = S.profile.tacx; return t && t.t > 0 && t.s > 0 ? t.t / t.s : null; }
+function mwFtp(ftp) { const r = tacxRatio(); return r && Math.abs(r - 1) > 0.03 ? Math.round(ftp * r) : ftp; }
+function tacxText(ftp) {
+  const r = tacxRatio(); if (!r) return null;
+  const pc = Math.round((r - 1) * 1000) / 10;
+  return Math.abs(r - 1) <= 0.03 ? 'Tacx e Stages allineati (' + (pc >= 0 ? '+' : '') + String(pc).replace('.', ',') + '%): su MyWhoosh usa la stessa FTP, ' + ftp + ' W'
+    : 'Il Tacx legge ' + (pc > 0 ? '+' : '') + String(pc).replace('.', ',') + '% rispetto agli Stages: su MyWhoosh imposta FTP ' + mwFtp(ftp) + ' W (non ' + ftp + ')';
+}
+const tacxFields = (t, s) => '<div class="set"><div class="l"><b>Watt medi su MyWhoosh</b><small>Letti dal Tacx</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="cT" value="' + (t || '') + '"><span>W</span></div></div></div></div>' +
+  '<div class="set"><div class="l"><b>Watt medi sul Fenix</b><small>Letti dagli Stages, stessa seduta</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="cS" value="' + (s || '') + '"><span>W</span></div></div></div></div>';
+function readTacx() { const t = +(document.getElementById('cT') || {}).value, s = +(document.getElementById('cS') || {}).value; return t >= 50 && t <= 600 && s >= 50 && s <= 600 ? { t: Math.round(t), s: Math.round(s), date: today() } : null; }
+function openTacxSheet() {
+  const P = S.profile, c = P.tacx || {};
+  openSheet('<div class="guide"><h2>Tacx e Stages</h2><p class="intro">Dopo una seduta sui rulli regolare (fondo o sweet spot), con gli Stages azzerati dal Fenix prima di partire: scrivi i watt medi della seduta letti da MyWhoosh e dal Fenix.</p>' + tacxFields(c.t, c.s) +
+    '<div id="cOut" class="t2" style="margin:12px 2px;font-size:14.5px"></div><button class="btn hot full" id="cSave">Salva</button>' + (P.tacx ? '<button class="btn ghost sm full" id="cDel" style="margin-top:8px">Cancella il confronto</button>' : '') + '</div>', () => {
+      const out = document.getElementById('cOut');
+      const upd = () => { const v = readTacx(); const old = P.tacx; P.tacx = v; out.textContent = v ? tacxText(P.ftp) : 'Servono tutti e due i valori.'; P.tacx = old; };
+      document.getElementById('cT').oninput = upd; document.getElementById('cS').oninput = upd; upd();
+      document.getElementById('cSave').onclick = () => { const v = readTacx(); if (!v) { toast('Servono tutti e due i valori'); return; } P.tacx = v; save(); closeSheet(); render(); toast(Math.abs(tacxRatio() - 1) <= 0.03 ? 'Allineati: niente da correggere' : 'FTP per MyWhoosh: ' + mwFtp(P.ftp) + ' W'); };
+      const del = document.getElementById('cDel'); if (del) del.onclick = () => { delete P.tacx; save(); closeSheet(); render(); };
+    });
+}
 // risultato del test FTP: potenza media e FC media dei 20 minuti (dal Lap del Fenix, cioè dagli Stages)
 function openTestSheet(d) {
   const P = S.profile; const p = S.plans[d];
   openSheet('<div class="guide"><h2>Risultato del test</h2><p class="intro">Leggi sul Fenix il Lap dei 20 minuti: potenza media (dagli Stages) e FC media.</p>' +
     '<div class="set"><div class="l"><b>Potenza media 20\'</b></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tW" placeholder="' + Math.round(P.ftp / 0.95) + '"><span>W</span></div></div></div></div>' +
     '<div class="set"><div class="l"><b>FC media 20\'</b><small>Facoltativa: diventa la FC di soglia</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tH" placeholder="' + P.lthr + '"><span>bpm</span></div></div></div></div>' +
+    '<details class="steps"' + (P.tacx ? '' : ' open') + '><summary>Confronto Tacx / Stages (facoltativo) ' + ico('chev') + '</summary><div class="mut" style="font-size:13px;margin:4px 2px 6px">Watt medi dell\'intera seduta di oggi su MyWhoosh e sul Fenix: serve a calcolare l\'FTP da impostare su MyWhoosh.' + (P.tacx ? ' Ultimo confronto: ' + longDate(P.tacx.date) + '.' : '') + '</div>' + tacxFields(P.tacx && P.tacx.t, P.tacx && P.tacx.s) + '</details>' +
     '<div id="tOut" class="t2" style="margin:12px 2px;font-size:14.5px">FTP = 95% della potenza media.</div>' +
     '<button class="btn hot full" id="tSave" disabled>Salva' + (icuOn() ? ' e aggiorna Intervals.icu' : '') + '</button></div>', () => {
       const $w = document.getElementById('tW'), $h = document.getElementById('tH'), out = document.getElementById('tOut'), btn = document.getElementById('tSave');
@@ -1221,11 +1251,12 @@ function openTestSheet(d) {
             icuOk = true;
           } catch (e) { icuOk = false; }
         }
+        const tc = readTacx(); if (tc) P.tacx = tc;
         P.ftp = ftp; if (v.hr) P.lthr = v.hr; P.lastTest = d; P.testSoon = false;
         if (p) p.testRes = { w: v.w, ftp, lthr: v.hr || null };
         save();
         const next = '<ul style="margin:6px 0 0;padding-left:18px">' + (icuOk === false ? '<li><b>Intervals.icu</b>: aggiornamento non riuscito, cambiala a mano in Impostazioni → Ciclismo (altrimenti al prossimo sync torna il valore vecchio).</li>' : '') +
-          '<li><b>MyWhoosh</b>: imposta FTP ' + ftp + ' W nel profilo.</li><li><b>Garmin Connect</b>: aggiorna FTP' + (v.hr ? ' e FC di soglia' : '') + ' nelle zone utente, così Fenix ed Edge si allineano.</li></ul>';
+          '<li><b>MyWhoosh</b>: imposta FTP ' + mwFtp(ftp) + ' W nel profilo' + (mwFtp(ftp) !== ftp ? ' (corretta per la differenza tra Tacx e Stages, così in ERG pedali ai watt giusti)' : '') + '.</li><li><b>Garmin Connect</b>: aggiorna FTP' + (v.hr ? ' e FC di soglia' : '') + ' nelle zone utente, così Fenix ed Edge si allineano.</li></ul>';
         $('#sheetBody').innerHTML = '<div class="guide"><h2>FTP ' + ftp + ' W</h2><p class="intro">' + (icuOk ? 'Aggiornata su SMG e su Intervals.icu.' : 'Aggiornata su SMG.') + ' Restano due passaggi a mano:</p>' + next +
           '<p class="intro" style="margin-top:10px">Prossimo test dopo il prossimo scarico, tra almeno 6 settimane.</p><button class="btn hot full" id="tOk">Fatto</button></div>';
         document.getElementById('tOk').onclick = () => closeSheet();
