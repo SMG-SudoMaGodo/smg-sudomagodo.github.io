@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.5';
+const APP_V = '1.5.1';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -438,7 +438,7 @@ function checkinHTML(d) {
     '<div class="feel">' + labels.map((l, i) => '<button data-feel="' + (i + 1) + '"' + (+c.feel === i + 1 ? ' class="on"' : '') + '>' + face(i + 1) + l + '</button>').join('') + '</div>' +
     (fromIcu ? '<div class="src">' + ico('link') + 'Valori dal Fenix via Intervals.icu</div>' : icuNote) +
     '<div class="grid2">' + f('hrv', 'HRV notturna', 'ms', 'es. 62') + f('rhr', 'FC a riposo', 'bpm', 'es. 46') +
-    f('sleep', 'Punteggio sonno', '/100', 'es. 78') + f('garmin', 'Prontezza Garmin', '/100', 'facoltativo') + '</div>' +
+    f('sleep', 'Punteggio sonno', '/100', 'es. 78') + f('garmin', 'Training Readiness', '/100', 'facoltativo') + '</div>' +
     '<label class="check"><span class="switch"><input type="checkbox" id="ci_pain"' + (c.pain ? ' checked' : '') + '><i></i></span>Qualche dolore o acciacco oggi</label>' +
     '<div class="ctl" style="margin:0 0 14px"><div class="lab">Malanno</div><div class="chips" style="flex-wrap:wrap">' +
     [['', 'No'], ['neck', 'Raffreddore, gola'], ['body', 'Febbre, dolori diffusi']].map(([v, l]) => '<button class="chip' + ((c.ill || '') === v ? ' on' : '') + '" data-ill="' + v + '">' + l + '</button>').join('') + '</div></div>' +
@@ -505,7 +505,7 @@ function healthHTML(d) {
     metric('hrv', 'HRV notturna', 'ms', d, 'up'),
     metric('rhr', 'FC a riposo', 'bpm', d, 'down'),
     c.sleep != null && c.sleep !== '' ? metric('sleep', 'Sonno', '/100', d, 'up') : metric('sleepH', 'Sonno', 'ore', d, 'up', v => (Math.round(v * 10) / 10).toString().replace('.', ',')),
-    c.garmin != null && c.garmin !== '' ? metric('garmin', 'Prontezza Garmin', '/100', d, 'up') : ''
+    c.garmin != null && c.garmin !== '' ? metric('garmin', 'Training Readiness', '/100', d, 'up') : ''
   ];
   if (c.tsb != null && c.tsb !== '') {
     const t = +c.tsb; const txt = t < -25 ? 'Molto affaticato' : t < -10 ? 'Carico, in costruzione' : t <= 5 ? 'Equilibrio' : 'Fresco';
@@ -521,7 +521,7 @@ function scoreDetail(rd) {
   const row = (a, b, c, strong) => '<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line)' + (strong ? ';font-weight:700;color:var(--text)' : '') + '"><span style="flex:none;min-width:92px;color:var(--text)">' + a + '</span><span style="flex:1;min-width:0">' + b + '</span><b style="flex:none;color:' + (typeof c !== 'number' ? 'var(--text)' : c > 0 ? 'var(--green)' : c < 0 ? 'var(--red)' : 'var(--mut)') + '">' + (typeof c === 'number' ? sg(c) : c) + '</b></div>';
   let h = row('Partenza', '', '70') + rd.parts.map(p => row(esc(p.lab), esc(p.val), p.pts)).join('');
   h += row('Punteggio tuo', 'limitato tra 5 e 100', String(rd.own), true);
-  if (rd.garmin != null) h += row('Prontezza Garmin', 'media 50/50 con il tuo punteggio', String(rd.garmin)) + row('Totale', '(' + rd.own + ' + ' + rd.garmin + ') / 2', String(rd.score), true);
+  if (rd.garmin != null) h += row('Training Readiness', 'media 50/50 con il tuo punteggio', String(rd.garmin)) + row('Totale', '(' + rd.own + ' + ' + rd.garmin + ') / 2', String(rd.score), true);
   return '<details class="steps" style="margin-top:12px"><summary>Come è calcolato il punteggio ' + ico('chev') + '</summary><div class="t2" style="font-size:13px">' + h +
     '<div class="mut" style="font-size:12px;margin-top:6px">Verde da 70, arancione da 50, rosso sotto 50. Vicino a una soglia basta un piccolo cambiamento (per esempio la FC a riposo aggiornata da Garmin in giornata) per cambiare colore.</div></div></details>';
 }
@@ -539,7 +539,7 @@ function lightHTML(rd) {
 }
 
 const SNAPK = ['hrv', 'rhr', 'sleep', 'sleepH', 'tsb', 'garmin', 'feel'];
-const SNAPL = { hrv: ['HRV', ' ms'], rhr: ['FC a riposo', ' bpm'], sleep: ['Punteggio sonno', ''], sleepH: ['Ore di sonno', ' h'], tsb: ['Forma', ''], garmin: ['Prontezza Garmin', ''], feel: ['Sensazione', '/5'] };
+const SNAPL = { hrv: ['HRV', ' ms'], rhr: ['FC a riposo', ' bpm'], sleep: ['Punteggio sonno', ''], sleepH: ['Ore di sonno', ' h'], tsb: ['Forma', ''], garmin: ['Training Readiness', ''], feel: ['Sensazione', '/5'] };
 // cosa è cambiato rispetto al check-in
 function snapDiff(d) {
   const c = S.checkins[d]; if (!c || !c.snap) return [];
@@ -895,7 +895,7 @@ function renderDiario() {
 /* ------------------------------------------------------------------ */
 /* Vista: Profilo                                                      */
 /* ------------------------------------------------------------------ */
-const WNAME = { hrv: 'HRV', restingHR: 'FC a riposo', sleepScore: 'punteggio sonno', sleepSecs: 'ore di sonno', readiness: 'prontezza' };
+const WNAME = { hrv: 'HRV', restingHR: 'FC a riposo', sleepScore: 'punteggio sonno', sleepSecs: 'ore di sonno', readiness: 'Training Readiness' };
 function diagText() {
   const g = S.icu.diag; if (!g) return null;
   if (g.err) return 'Ultimo tentativo non riuscito (' + g.err + ')';
@@ -1059,7 +1059,8 @@ const GUIDE = [
     <ul><li><b>HRV</b>: più alta è meglio. Conta la media degli ultimi 7 giorni rispetto alla tua norma (la fascia indicata, calcolata su 60 giorni). Una notte storta pesa poco. Nelle prime settimane il confronto è con la media semplice.</li>
     <li><b>FC a riposo</b>: più bassa è meglio. Qualche battito sopra il solito è un segnale di stanchezza o di malanno in arrivo.</li>
     <li><b>Sonno</b>: il punteggio del Fenix; sotto 65 pesa sul semaforo.</li>
-    <li><b>Forma</b>: fitness meno fatica, da Intervals. La linea tratteggiata è lo zero: sopra sei fresco, molto sotto hai carico accumulato.</li></ul>
+    <li><b>Forma</b>: fitness meno fatica, da Intervals. La linea tratteggiata è lo zero: sopra sei fresco, molto sotto hai carico accumulato.</li>
+    <li><b>Training Readiness</b> (facoltativa): il valore della mattina che vedi sul Fenix. Se la inserisci nel check-in, il semaforo fa la media 50/50 tra il punteggio di SMG e il suo.</li></ul>
     <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>
     <p><b>Malanno</b> (nel check-in): con raffreddore o mal di gola solo sedute facili e più corte; con febbre o dolori diffusi riposo. Segnalo ogni giorno finché dura: dopo, 2-3 giorni di rientro graduale prima della qualità.</p>
     <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati. In <b>Come è calcolato il punteggio</b> trovi il contributo di ogni voce.</p>`],

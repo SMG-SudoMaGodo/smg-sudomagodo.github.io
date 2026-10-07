@@ -482,7 +482,7 @@ function readiness(checkins, date) {
   if (c.ill === 'body') { add('Malanno', 'febbre o dolori diffusi', -35); why.push('febbre o malessere'); }
   s = clamp(Math.round(s), 5, 100);
   const own = s;
-  if (c.garmin) {                                   // Prontezza Garmin, se inserita: media 50/50
+  if (c.garmin) {                                   // Training Readiness, se inserita: media 50/50
     s = Math.round((s + clamp(+c.garmin, 0, 100)) / 2);
   }
   const light = s >= 70 ? 'green' : s >= 50 ? 'yellow' : 'red';
