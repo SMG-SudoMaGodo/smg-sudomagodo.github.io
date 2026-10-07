@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.5.1';
+const APP_V = '1.5.2';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1092,7 +1092,7 @@ const GUIDE = [
   ['link', 'Intervals, Garmin, MyWhoosh', `<ul><li><b>SMG → Intervals → Garmin Connect → Fenix ed Edge</b>; e <b>Intervals → MyWhoosh</b> per le sedute indoor.</li>
     <li>Da Garmin a Intervals arrivano attività, sonno, HRV, FC a riposo e peso. FTP e soglie no.</li>
     <li>FTP, FC e passo di soglia SMG li legge da Intervals: <b>si cambiano lì</b> (e se vuoi anche su Garmin, per le zone dell'orologio).</li></ul>`],
-  ['indoor', 'Rulli e potenza', `<ul><li><b>Su MyWhoosh</b> il Tacx è l'unico misuratore e comanda l'ERG. Gli Stages non si collegano a MyWhoosh: restano solo sul <b>Fenix</b>, che registra la stessa seduta. Su Intervals tieni solo l'attività del Fenix (l'importazione da MyWhoosh è disattivata); su Strava tieni quella di MyWhoosh, per il dislivello virtuale.</li>
+  ['indoor', 'Rulli e potenza', `<ul><li><b>Su MyWhoosh</b> il Tacx è l'unico misuratore e comanda l'ERG. Gli Stages non si collegano a MyWhoosh: restano solo sul <b>Fenix</b>, che registra la stessa seduta. Sul Fenix puoi avviare anche la seduta SMG (stessa durata, passi automatici, autovalutazione a fine allenamento): fai partire insieme Fenix e MyWhoosh e spegni sul Fenix gli avvisi di obiettivo, perché con Tacx e Stages che leggono diverso suonerebbero di continuo. Sul Fenix non abbinare il Tacx come rullo o come potenza. Su Intervals tieni solo l'attività del Fenix (l'importazione da MyWhoosh è disattivata); su Strava tieni quella di MyWhoosh, per il dislivello virtuale.</li>
     <li><b>Prima di ogni seduta</b> azzera gli Stages dal Fenix (Calibra, pedivella ferma in verticale). Ogni tanto calibra anche il Tacx dall'app Tacx.</li>
     <li><b>Confronto Tacx / Stages</b>, una volta sola (Profilo → <b>Tacx e Stages</b>): dopo una seduta regolare scrivi i watt medi letti su MyWhoosh e sul Fenix. Entro il 3% non serve niente. Oltre, SMG ti dice quale FTP impostare su MyWhoosh (FTP × watt Tacx ÷ watt Stages), così in ERG pedali ai watt giusti; su Intervals e Garmin resta l'FTP vera. Rifallo solo se cambi qualcosa (batteria degli Stages, aggiornamento del Tacx).</li>
     <li><b>Test FTP</b>: ERG acceso per riscaldamento, allunghi e defaticamento; spento solo per i 20 minuti, in cui regoli lo sforzo con i rapporti guardando i watt sul Fenix. Lap all'inizio e alla fine dei 20 minuti: il risultato si legge lì. I test di Garmin e MyWhoosh hanno protocolli diversi: per confrontare i risultati nel tempo usa sempre quello di SMG.</li></ul>`],

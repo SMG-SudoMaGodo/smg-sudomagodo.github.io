@@ -305,7 +305,7 @@ const T = [
     setup: {
       indoor: ['Conta la potenza degli Stages letta dal Fenix. Su MyWhoosh lascia tutto com\'è: il Tacx resta la sorgente primaria.',
         'Per i 20 minuti spegni l\'ERG su MyWhoosh: il Tacx fa solo da resistenza e decidi tu lo sforzo con i rapporti, guardando i watt sul Fenix.',
-        'Sul Fenix premi Lap all\'inizio e alla fine dei 20 minuti: lì leggi potenza e FC media.'],
+        'Sul Fenix premi Lap all\'inizio e alla fine dei 20 minuti (se hai avviato la seduta sul Fenix il Lap è automatico): lì leggi potenza e FC media.'],
       road: ['Usa la bici da strada con gli Stages, su una salita lunga e regolare o un rettilineo senza incroci.',
         'Premi Lap all\'inizio e alla fine dei 20 minuti: lì leggi potenza e FC media.']
     },
