@@ -323,23 +323,43 @@ const TEMPLATES = Object.fromEntries(T.map(t => [t.id, t]));
 
 /* ---------- Forza & mobilità (extra, restano nell'app) ---------- */
 const EXTRAS = [
+  // [esercizio, dose, come si fa]
   { id: 'mob_bike', name: 'Mobilità per ciclisti', min: 15, kind: 'Mobilità', items: [
-    ['Gatto-mucca', '10 ripetizioni lente'], ['Affondo con allungo flessori dell\'anca', '45" per lato'],
-    ['Rotazioni del busto da quadrupedia', '8 per lato'], ['Piriforme da supino (figura 4)', '45" per lato'],
-    ['Allungamento femorali con elastico o asciugamano', '45" per lato'], ['Apertura del petto al muro', '30" per lato'],
-    ['Respirazione diaframmatica', '1 minuto'] ] },
+    ['Gatto-mucca', '10 ripetizioni lente', 'A quattro zampe: inarca la schiena verso l\'alto espirando, poi lasciala scendere guardando avanti inspirando.'],
+    ['Affondo con allungo flessori dell\'anca', '45" per lato', 'Un ginocchio a terra e l\'altro piede avanti: spingi il bacino in avanti finché senti tirare davanti all\'anca della gamba dietro.'],
+    ['Rotazioni del busto da quadrupedia', '8 per lato', 'A quattro zampe, una mano dietro la nuca: porta il gomito verso il braccio a terra, poi aprilo verso il soffitto seguendolo con lo sguardo.'],
+    ['Piriforme da supino (gambe a «4»)', '45" per lato', 'Sdraiato sulla schiena, appoggia la caviglia destra sul ginocchio sinistro (le gambe disegnano un 4), poi tira verso il petto la coscia sinistra. Senti tirare nel gluteo destro.'],
+    ['Allungamento femorali con elastico o asciugamano', '45" per lato', 'Sdraiato, passa l\'elastico sotto il piede e porta la gamba tesa verso l\'alto finché senti tirare dietro la coscia; l\'altra gamba resta a terra.'],
+    ['Apertura del petto al muro', '30" per lato', 'Avambraccio appoggiato al muro all\'altezza della spalla, gomito piegato: ruota il busto dalla parte opposta finché senti aprire il petto.'],
+    ['Respirazione diaframmatica', '1 minuto', 'Sdraiato, una mano sulla pancia: inspira dal naso gonfiando la pancia, espira lentamente dalla bocca.'] ] },
   { id: 'core', name: 'Core & stabilità', min: 15, kind: 'Forza', items: [
-    ['Plank frontale', '3 × 40"'], ['Plank laterale', '2 × 30" per lato'], ['Bird dog', '3 × 8 per lato'],
-    ['Dead bug', '3 × 10'], ['Ponte glutei', '3 × 12'], ['Superman', '2 × 10'] ] },
+    ['Plank frontale', '3 × 40"', 'Sugli avambracci e sulle punte dei piedi, corpo dritto dalla testa ai talloni: pancia contratta, niente sedere in alto o schiena che cede.'],
+    ['Plank laterale', '2 × 30" per lato', 'Su un avambraccio e sul fianco del piede, corpo dritto: tieni il bacino alto.'],
+    ['Bird dog', '3 × 8 per lato', 'A quattro zampe: allunga insieme braccio destro in avanti e gamba sinistra indietro, tieni 2", torna e cambia lato. Schiena ferma.'],
+    ['Dead bug', '3 × 10', 'Sdraiato sulla schiena, braccia verso il soffitto e ginocchia piegate a 90°: abbassa insieme braccio e gamba opposti senza staccare la schiena da terra, alterna.'],
+    ['Ponte glutei', '3 × 12', 'Sdraiato, ginocchia piegate e piedi a terra: solleva il bacino stringendo i glutei finché il corpo è dritto dalle spalle alle ginocchia, poi scendi piano.'],
+    ['Superman', '2 × 10', 'A pancia in giù, braccia avanti: solleva insieme braccia, petto e gambe di pochi centimetri, tieni 2" e scendi.'] ] },
   { id: 'legs', name: 'Forza gambe a corpo libero', min: 20, kind: 'Forza', items: [
-    ['Squat', '3 × 12'], ['Affondi indietro', '3 × 8 per gamba'], ['Ponte glutei a una gamba', '3 × 8 per lato'],
-    ['Step-up su gradino o sedia', '3 × 10 per gamba'], ['Mostri laterali con elastico', '2 × 12 passi per lato'], ['Wall sit', '2 × 40"'] ] },
+    ['Squat', '3 × 12', 'Piedi alla larghezza delle spalle: scendi come per sederti, ginocchia in linea con le punte e talloni a terra, poi risali.'],
+    ['Affondi indietro', '3 × 8 per gamba', 'Fai un passo lungo indietro e scendi finché il ginocchio dietro sfiora il pavimento; spingi sul piede davanti per tornare su.'],
+    ['Ponte glutei a una gamba', '3 × 8 per lato', 'Come il ponte glutei, ma con una gamba tesa in aria: sali spingendo sul tallone della gamba a terra.'],
+    ['Step-up su gradino o sedia', '3 × 10 per gamba', 'Sali sul gradino spingendo con la gamba appoggiata sopra, senza aiutarti con quella a terra; scendi piano.'],
+    ['Mostri laterali con elastico', '2 × 12 passi per lato', 'Elastico intorno alle caviglie o sopra le ginocchia, gambe semipiegate: fai passi laterali tenendo l\'elastico sempre teso.'],
+    ['Wall sit', '2 × 40"', 'Schiena appoggiata al muro, scendi finché le ginocchia sono a 90° (come seduto su una sedia invisibile) e resta lì.'] ] },
   { id: 'total', name: 'Forza total body', min: 25, kind: 'Forza', items: [
-    ['Squat', '3 × 12'], ['Piegamenti (anche sulle ginocchia)', '3 × 8-12'], ['Rematore con elastico o zaino', '3 × 12'],
-    ['Affondi indietro', '3 × 8 per gamba'], ['Plank frontale', '3 × 40"'], ['Ponte glutei', '3 × 12'] ] },
+    ['Squat', '3 × 12', 'Piedi alla larghezza delle spalle: scendi come per sederti, ginocchia in linea con le punte e talloni a terra, poi risali.'],
+    ['Piegamenti (anche sulle ginocchia)', '3 × 8-12', 'Mani poco più larghe delle spalle, corpo dritto: scendi col petto verso terra e spingi su. Sulle ginocchia se serve.'],
+    ['Rematore con elastico o zaino', '3 × 12', 'Busto inclinato in avanti a schiena dritta: tira l\'elastico o lo zaino verso la pancia avvicinando le scapole, poi riallunga le braccia.'],
+    ['Affondi indietro', '3 × 8 per gamba', 'Fai un passo lungo indietro e scendi finché il ginocchio dietro sfiora il pavimento; spingi sul piede davanti per tornare su.'],
+    ['Plank frontale', '3 × 40"', 'Sugli avambracci e sulle punte dei piedi, corpo dritto dalla testa ai talloni: pancia contratta.'],
+    ['Ponte glutei', '3 × 12', 'Sdraiato, ginocchia piegate: solleva il bacino stringendo i glutei, poi scendi piano.'] ] },
   { id: 'mob_hips', name: 'Anche e schiena libere', min: 12, kind: 'Mobilità', items: [
-    ['Posizione 90/90', '1\' per lato'], ['Bambino con braccia avanti', '1 minuto'], ['Cobra dolce', '8 ripetizioni'],
-    ['Rotazioni toraciche a terra (libro aperto)', '8 per lato'], ['Squat profondo assistito', '1 minuto'], ['Allungamento quadricipite in piedi', '30" per lato'] ] }
+    ['Posizione 90/90', '1\' per lato', 'Seduto a terra, una gamba piegata davanti e l\'altra piegata di lato, entrambe a 90°: busto dritto, poi inclinati un po\' sulla gamba davanti.'],
+    ['Bambino con braccia avanti', '1 minuto', 'In ginocchio, siediti sui talloni e allunga busto e braccia in avanti a terra, fronte giù. Respira lento.'],
+    ['Cobra dolce', '8 ripetizioni', 'A pancia in giù, mani sotto le spalle: solleva piano il petto distendendo le braccia quanto basta, bacino a terra, poi scendi.'],
+    ['Rotazioni toraciche a terra (libro aperto)', '8 per lato', 'Sdraiato su un fianco, ginocchia piegate e braccia unite davanti: apri il braccio sopra verso l\'altro lato come una pagina, seguendolo con lo sguardo.'],
+    ['Squat profondo assistito', '1 minuto', 'Tieniti a uno stipite o a un tavolo e scendi nello squat più basso possibile, talloni a terra, petto alto.'],
+    ['Allungamento quadricipite in piedi', '30" per lato', 'In piedi, tieniti a un appoggio, afferra la caviglia e porta il tallone verso il gluteo, ginocchia vicine.'] ] }
 ];
 
 /* ---------- Sfide del giorno ---------- */

@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.5.5';
+const APP_V = '1.5.6';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -424,7 +424,7 @@ function extraHTML(id, d) {
   const done = S.extraDone[d] === id;
   return '<div class="card extra"><h3>' + ico('strength') .replace('<svg', '<svg style="width:16px;height:16px;color:var(--strength)"') + 'Extra facoltativo · ' + x.kind + '<span class="sp"></span><span class="tag">' + x.min + "'</span></h3>" +
     '<b style="font-size:17px">' + esc(x.name) + '</b><details class="steps"><summary>Esercizi ' + ico('chev') + '</summary><ol>' +
-    x.items.map(i => '<li>' + esc(i[0]) + '<span>' + esc(i[1]) + '</span></li>').join('') + '</ol></details>' +
+    x.items.map(i => '<li><em class="nm">' + esc(i[0]) + '</em><span>' + esc(i[1]) + '</span>' + (i[2] ? '<small class="how">' + esc(i[2]) + '</small>' : '') + '</li>').join('') + '</ol></details>' +
     '<button class="btn sm ' + (done ? 'lime' : '') + '" id="aExtra" data-x="' + id + '" style="margin-top:10px">' + ico('check') + (done ? 'Fatto' : 'Segna come fatto') + '</button></div>';
 }
 
@@ -1111,7 +1111,7 @@ const GUIDE = [
   ['user', 'Profilo', `<ul><li><b>Test FTP</b>: vedi quando arriva il prossimo; <b>Anticipa</b> lo fa proporre al primo giorno verde di qualità. Dopo il test tocca <b>Inserisci il risultato</b> (anche dalla seduta): potenza media e FC media del Lap dei 20 minuti sul Fenix, cioè dagli Stages. SMG calcola l'FTP (95%), la scrive su Intervals.icu insieme alla FC di soglia e ti ricorda di aggiornare MyWhoosh e Garmin Connect. Se cambi l'FTP direttamente su Intervals, SMG lo prende come nuovo test.</li>
     <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Tempi da concordare con chi ti segue.</li>
     <li><b>La tua settimana</b>: giorni attivi, giorni lunghi, durata massima e ora in cui esci di solito (serve per buio e meteo).</li>
-    <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>
+    <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Apri <b>Esercizi</b>: sotto ogni esercizio c'è una riga su come si fa. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>
     <li><b>Giorni speciali</b>: per una data precisa segni un impegno (niente allenamento) o un tempo diverso dal solito, anche in un giorno di solito libero. Si aggiungono qui o toccando un giorno futuro nel Diario; l'app ne tiene conto anche nell'anteprima e nella distribuzione delle sedute dure.</li></ul>`],
   ['save', 'Backup e cambio telefono', `<p>Le sedute inviate e i dati di salute si recuperano da Intervals (ultimi 60 giorni). Giorni, sport, località e check-in a mano vivono solo sul telefono: <b>Esporta backup</b> una volta al mese (te lo ricorda l'app). Su un telefono nuovo: installa SMG, <b>Importa</b> il backup e reincolla la chiave di Intervals.</p>`],
   ['wrench', 'Se qualcosa non va', `<ul><li><b>Nuova versione</b>: quando è pronta compare in basso la barra <b>Aggiorna</b>: toccala e l'app si ricarica. Se non compare e il numero di versione in fondo al Profilo è vecchio, chiudi del tutto l'app e riaprila.</li>

@@ -192,9 +192,11 @@ details[open].steps summary svg{transform:rotate(180deg)}
 .rest p{color:var(--t2);margin:0 auto 16px;max-width:360px}
 
 .extra ol{margin:8px 0 0;padding:0;list-style:none;counter-reset:x}
-.extra li{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);counter-increment:x;font-size:14px}
+.extra li{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);counter-increment:x;font-size:14px}
 .extra li::before{content:counter(x);font-weight:800;color:var(--strength);width:16px;flex:none}
 .extra li span{margin-left:auto;color:var(--mut);font-size:12.5px;text-align:right;white-space:nowrap;padding-left:8px}
+.extra li .nm{flex:1 1 0;min-width:0;font-style:normal}
+.extra li .how{flex-basis:100%;padding-left:26px;color:var(--t2);font-size:12.5px;line-height:1.45}
 
 /* ---------- diario ---------- */
 .weeknav{display:flex;align-items:center;gap:8px;margin-bottom:12px}
