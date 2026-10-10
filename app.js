@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.5.2';
+const APP_V = '1.5.3';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -205,10 +205,11 @@ async function icuSync(quiet) {
       if (w.ctl != null && w.atl != null) { c.tsb = Math.round(w.ctl - w.atl); c.src.tsb = 'icu'; (S.fit || (S.fit = {}))[d] = [Math.round(w.ctl * 10) / 10, Math.round(w.atl * 10) / 10]; }
       if (!Object.keys(c).some(k => k !== 'src')) delete S.checkins[d];
     });
-    const acts = await icu('/activities?oldest=' + E.addDays(t, -42) + '&newest=' + t);
+    // newest = domani: così le attività di oggi arrivano sempre, anche se Intervals tratta la data come inizio giornata
+    const acts = await icu('/activities?oldest=' + E.addDays(t, -42) + '&newest=' + E.addDays(t, 1));
     const byDay = {};
     (acts || []).forEach(a => {
-      const d = (a.start_date_local || '').slice(0, 10); if (!d) return;
+      const d = (a.start_date_local || '').slice(0, 10); if (!d || d > t) return;
       const rpe = +(a.icu_rpe || a.perceived_exertion || 0), feel = +(a.feel || 0);
       const t0 = Date.parse(a.start_date_local || '') || 0, mv = a.moving_time || a.elapsed_time || 0;
       // doppione (stessa uscita registrata da Fenix e da MyWhoosh): stesso giorno, partenza entro 15 minuti
@@ -1329,7 +1330,9 @@ async function boot() {
   const d = today(); const p = S.plans[d];
   const got = await fetchWeather(false);
   if (got) { const q = S.plans[d]; if (q && q.status === 'planned' && !q.lightUsed && !q.wxUsed && !(q.opts && Object.keys(q.opts).length)) refreshToday(true); render(); }
-  if (icuOn() && Date.now() - (S.icu.last || 0) > 10 * 60e3) icuSync(true);
+  // finché la seduta di oggi non risulta fatta si ricontrolla più spesso (l'attività arriva da Garmin dopo qualche minuto)
+  const waiting = p && p.status === 'planned' && !p.rest;
+  if (icuOn() && Date.now() - (S.icu.last || 0) > (waiting ? 2 : 10) * 60e3) icuSync(true);
   void p;
 }
 document.addEventListener('visibilitychange', () => {
