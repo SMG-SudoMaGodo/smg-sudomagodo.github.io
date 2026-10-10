@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.5.3';
+const APP_V = '1.5.4';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -230,7 +230,7 @@ async function icuSync(quiet) {
     try { await icuRebuild(E.addDays(t, -60), E.addDays(t, -1), byDay); } catch (e) {}
     Object.keys(byDay).forEach(d => {
       const p = S.plans[d];
-      if (p && !p.rest && p.status === 'planned' && byDay[d].some(a => a.sport !== 'strength' && a.min >= 15)) { p.status = 'done'; p.via = 'icu'; }
+      if (p && !p.rest && (p.status === 'planned' || (p.status === 'skipped' && d === t)) && byDay[d].some(a => a.sport !== 'strength' && a.min >= 15)) { p.status = 'done'; p.via = 'icu'; delete p.altExtra; }
     });
     S.icu.last = Date.now(); save();
     refreshToday(false);
@@ -555,6 +555,16 @@ function staleHTML(p) {
     (diffs.length ? '<div class="t2" style="font-size:13.5px;margin-top:10px"><b style="color:var(--text)">Cosa è cambiato</b><ul style="margin:4px 0 0;padding-left:18px">' + diffs.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '') +
     '<div class="row" style="margin-top:12px"><button class="btn hot" id="stUpd">Adegua la seduta</button><button class="btn" id="stKeep">Tieni questa</button></div></div>';
 }
+// attività di oggi arrivate da Intervals: sempre visibili nella schermata Oggi
+function todayActsHTML(d, p) {
+  const acts = (S.activities[d] || []).filter(a => a.min >= 1);
+  if (!acts.length) return '';
+  const head = p.rest ? 'Oggi era riposo, ma ti sei allenato' : p.status === 'done' ? 'Fatto oggi' : 'Da Intervals oggi';
+  return '<div class="card"><h3>' + ico('check') + ' ' + head + '</h3>' + acts.map(a =>
+    '<div class="set">' + sportIcon(a.sport === 'other' ? 'road' : a.sport) + '<div class="l"><b>' + esc(a.name) + '</b><small>' + fmtMin(a.min) +
+    (a.sport !== 'strength' ? ' · ' + E.LEVELS[a.level] : '') + (a.load ? ' · carico ' + Math.round(a.load) : '') + '</small></div></div>').join('') +
+    (p.rest ? '<div class="mut" style="font-size:12.5px;margin-top:6px">Nessun problema: le prossime proposte ne tengono conto.</div>' : '') + '</div>';
+}
 function restHTML(p) {
   if (p.illRest) return '<div class="card rest"><div class="big">🤒</div><h2>Riposa e guarisci</h2><p>Con febbre o dolori diffusi allenarsi fa solo danni. Bevi, dormi, e quando stai meglio segnalo nel check-in: SMG ti farà rientrare con calma.</p></div>';
   if (p.special === 'off') return '<div class="card rest"><div class="big">📅</div><h2>Oggi hai un impegno</h2><p>Giorno segnato come impegnato. Se poi trovi un buco, puoi comunque muoverti.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aExtraDay">Ho trovato un buco</button><button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
@@ -692,6 +702,7 @@ function renderOggi() {
   else h += lightHTML(rd);
   if (!p.free && (!p.rest || p.redRest) && p.status === 'planned' && p.newLight && p.newLight !== p.keptLight) h += staleHTML(p);
   h += p.rest ? restHTML(p) : workoutHTML(p);
+  h += todayActsHTML(d, p);
   const exId = p.rest ? E.EXTRAS[E.hash(d) % E.EXTRAS.length].id : p.extra;
   if (p.status === 'skipped' && p.altExtra) h += extraHTML(p.altExtra, d);
   else if (p.status !== 'skipped' && S.profile.sports.strength && exId && (p.rest || p.level <= 2)) h += extraHTML(exId, d);
