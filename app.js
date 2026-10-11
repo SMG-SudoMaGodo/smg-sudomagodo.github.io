@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.5.6';
+const APP_V = '1.5.7';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -559,11 +559,12 @@ function staleHTML(p) {
 function todayActsHTML(d, p) {
   const acts = (S.activities[d] || []).filter(a => a.min >= 1);
   if (!acts.length) return '';
-  const head = p.rest ? 'Oggi era riposo, ma ti sei allenato' : p.status === 'done' ? 'Fatto oggi' : 'Da Intervals oggi';
+  const isT = d === today();
+  const head = p && p.rest ? (isT ? 'Oggi era riposo, ma ti sei allenato' : 'Era riposo, ma ti sei allenato') : isT ? (p && p.status === 'done' ? 'Fatto oggi' : 'Da Intervals oggi') : 'Cosa hai fatto';
   return '<div class="card"><h3>' + ico('check') + ' ' + head + '</h3>' + acts.map(a =>
     '<div class="set">' + sportIcon(a.sport === 'other' ? 'road' : a.sport) + '<div class="l"><b>' + esc(a.name) + '</b><small>' + fmtMin(a.min) +
     (a.sport !== 'strength' ? ' · ' + E.LEVELS[a.level] : '') + (a.load ? ' · carico ' + Math.round(a.load) : '') + '</small></div></div>').join('') +
-    (p.rest ? '<div class="mut" style="font-size:12.5px;margin-top:6px">Nessun problema: le prossime proposte ne tengono conto.</div>' : '') + '</div>';
+    (p && p.rest && isT ? '<div class="mut" style="font-size:12.5px;margin-top:6px">Nessun problema: le prossime proposte ne tengono conto.</div>' : '') + '</div>';
 }
 function restHTML(p) {
   if (p.illRest) return '<div class="card rest"><div class="big">🤒</div><h2>Riposa e guarisci</h2><p>Con febbre o dolori diffusi allenarsi fa solo danni. Bevi, dormi, e quando stai meglio segnalo nel check-in: SMG ti farà rientrare con calma.</p></div>';
@@ -868,7 +869,14 @@ function renderDiario() {
     } else if (d > t && cfg.on) {
       icon = '<div class="sporticon" style="background:var(--s2);color:var(--mut)">' + ico('cal') + '</div>'; title = cfg.long ? 'Giorno lungo' : 'Allenamento'; sub = 'fino a ' + fmtMin(cfg.max) + (cfg.special ? ' · giorno speciale' : ''); stc = 'plan'; stt = cfg.special ? 'Speciale' : 'In arrivo';
     } else if (d < t && cfg.on) { title = 'Nessuna attività'; }
-    if (p && !p.rest && acts.length && p.status === 'done') sub += ' · ✓ Intervals';
+    // se c'è un'attività vera, il diario mostra quella (con la proposta di SMG tra parentesi)
+    const real = acts.filter(a => a.sport !== 'strength' && a.min >= 10);
+    if (p && !p.rest && real.length) {
+      const a0 = real.slice().sort((a, b) => b.min - a.min)[0], tot = real.reduce((s2, y) => s2 + y.min, 0), lv = Math.max(...real.map(a => a.level));
+      icon = sportIcon(a0.sport === 'other' ? 'road' : a0.sport); title = a0.name + (real.length > 1 ? ' + ' + (real.length - 1) : '');
+      sub = (E.SPORTS[a0.sport] ? E.SPORTS[a0.sport].name + ' · ' : '') + fmtMin(tot) + ' · ' + E.LEVELS[lv] + ' · proposta: ' + (p.freeName || E.TEMPLATES[p.tid].name);
+      stc = 'done'; stt = 'Fatta';
+    }
     rows += '<button class="day' + (d === t ? ' today' : '') + '" data-day="' + d + '"><div class="dn"><small>' + GG[x.getDay()].slice(0, 3) + '</small><b>' + x.getDate() + '</b></div>' + icon +
       '<div class="info"><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></div>' + (stt ? '<span class="st ' + stc + '">' + stt + '</span>' : '') + '</button>';
   }
@@ -898,7 +906,9 @@ function renderDiario() {
     if (!p || p.rest) return;
     let extra = '';
     if (d < t) extra = '<div class="row" style="margin-top:4px"><button class="btn" data-set="done">' + ico('check') + 'Fatta</button><button class="btn" data-set="skipped">' + ico('x') + 'Saltata</button></div>';
-    openSheet('<div class="d mut" style="font-size:14px;font-weight:600;margin:0 2px 10px">' + longDate(d) + '</div>' + workoutHTML(p, true) + extra, () => {
+    const acts = todayActsHTML(d, p);
+    openSheet('<div class="d mut" style="font-size:14px;font-weight:600;margin:0 2px 10px">' + longDate(d) + '</div>' + acts +
+      (acts ? '<div class="d mut" style="font-size:13px;font-weight:600;margin:14px 2px 8px">Proposta di SMG</div>' : '') + workoutHTML(p, true) + extra, () => {
       document.querySelectorAll('[data-set]').forEach(x => x.onclick = () => { p.status = x.dataset.set; save(); closeSheet(); render(); });
     });
   });
@@ -1099,7 +1109,7 @@ const GUIDE = [
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
-  ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Tocca un giorno passato per vedere la seduta o segnarla.</li>
+  ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Quando da Intervals arriva l'attività vera, il diario mostra quella (nome, sport, durata, livello) con accanto la proposta di SMG. Tocca un giorno passato per vedere cosa hai fatto e la seduta proposta, o per segnarla.</li>
     <li><b>Andamento della forma</b>: fitness (azzurro) e fatica (rosa) delle ultime 8 settimane. Se la fitness sale, stai migliorando. Tocca il grafico per i valori del giorno.</li></ul>`],
   ['link', 'Intervals, Garmin, MyWhoosh', `<ul><li><b>SMG → Intervals → Garmin Connect → Fenix ed Edge</b>; e <b>Intervals → MyWhoosh</b> per le sedute indoor.</li>
     <li>Da Garmin a Intervals arrivano attività, sonno, HRV, FC a riposo e peso. FTP e soglie no.</li>
