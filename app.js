@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.6.1';
+const APP_V = '1.6.2';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -971,7 +971,8 @@ function renderDiario() {
   $('#wNext').onclick = () => { if (weekOff < 1) { weekOff++; render(); } };
   document.querySelectorAll('[data-day]').forEach(b => b.onclick = () => {
     const d = b.dataset.day; const p = S.plans[d];
-    if (d === t) { go('oggi'); return; }
+    // oggi: se c'è già un'attività registrata si apre come gli altri giorni, altrimenti si va alla schermata Oggi
+    if (d === t && !(S.activities[d] || []).some(a => a.min >= 1)) { go('oggi'); return; }
     if (d > t) { openSpecialSheet(d); return; }
     if (!p || p.rest) {
       // giorno di riposo (o senza proposta) in cui ti sei allenato: si apre lo stesso, con le attività
