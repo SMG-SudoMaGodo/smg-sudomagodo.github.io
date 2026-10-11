@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.6';
+const APP_V = '1.6.1';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -598,7 +598,7 @@ async function openActSheet(id) {
   try {
     a = await icuAct(encodeURIComponent(id));
     try { st = await icuAct(encodeURIComponent(id) + '/streams.json?types=heartrate,watts,altitude,cadence,velocity_smooth'); } catch (e) {}
-  } catch (e) { $('#sheetBody').innerHTML = '<div class="guide"><h2>Attività</h2><p class="intro">Non riesco a leggere l\'attività (' + (e.status || 'rete') + '). Riprova più tardi o aprila su Intervals.icu.</p><a class="btn full" target="_blank" rel="noopener" href="https://intervals.icu/activities/' + encodeURIComponent(id) + '">Apri su Intervals.icu</a></div>'; return; }
+  } catch (e) { $('#sheetBody').innerHTML = '<div class="guide"><h2>Attività</h2><p class="intro">Non riesco a leggere l\'attività (' + (e.status || 'rete') + '). ' + (e.status === 403 || e.status === 422 ? 'Succede con le attività arrivate a Intervals da Strava: Strava non permette ad altre app di leggerne i dati. Quelle caricate da Garmin si aprono normalmente.' : 'Riprova più tardi o aprila su Intervals.icu.') + '</p><a class="btn full" target="_blank" rel="noopener" href="https://intervals.icu/activities/' + encodeURIComponent(id) + '">Apri su Intervals.icu</a></div>'; return; }
   if (!sheetOpen()) return;
   const sp = E.activitySport(a.type), P = S.profile, tiles = [];
   const add = (v, lab) => { if (v != null && v !== '' && v !== '—') tiles.push('<div class="tile"><b class="num">' + v + '</b><small>' + lab + '</small></div>'); };
@@ -973,7 +973,12 @@ function renderDiario() {
     const d = b.dataset.day; const p = S.plans[d];
     if (d === t) { go('oggi'); return; }
     if (d > t) { openSpecialSheet(d); return; }
-    if (!p || p.rest) return;
+    if (!p || p.rest) {
+      // giorno di riposo (o senza proposta) in cui ti sei allenato: si apre lo stesso, con le attività
+      const acts = todayActsHTML(d, p || { rest: true });
+      if (acts) openSheet('<div class="d mut" style="font-size:14px;font-weight:600;margin:0 2px 10px">' + longDate(d) + '</div>' + acts);
+      return;
+    }
     let extra = '';
     if (d < t) extra = '<div class="row" style="margin-top:4px"><button class="btn" data-set="done">' + ico('check') + 'Fatta</button><button class="btn" data-set="skipped">' + ico('x') + 'Saltata</button></div>';
     const acts = todayActsHTML(d, p);
