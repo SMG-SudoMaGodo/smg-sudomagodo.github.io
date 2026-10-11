@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.5.7';
+const APP_V = '1.6';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -221,7 +221,7 @@ async function icuSync(quiet) {
         if (score(cand) <= score(dup)) return;   // si tiene la registrazione più completa
         list.splice(list.indexOf(dup), 1);
       }
-      list.push({ t0, watts: !!(a.icu_average_watts || a.average_watts), hr: !!a.average_heartrate, sport: E.activitySport(a.type), level: E.activityLevel(a, S.profile), name: a.name || a.type,
+      list.push({ id: a.id != null ? String(a.id) : null, t0, watts: !!(a.icu_average_watts || a.average_watts), hr: !!a.average_heartrate, sport: E.activitySport(a.type), level: E.activityLevel(a, S.profile), name: a.name || a.type,
         min: Math.round((a.moving_time || a.elapsed_time || 0) / 60), load: a.icu_training_load || 0,
         rpe: rpe >= 1 && rpe <= 10 ? rpe : null, feel: feel >= 1 && feel <= 5 ? feel : null });
     });
@@ -562,10 +562,80 @@ function todayActsHTML(d, p) {
   const isT = d === today();
   const head = p && p.rest ? (isT ? 'Oggi era riposo, ma ti sei allenato' : 'Era riposo, ma ti sei allenato') : isT ? (p && p.status === 'done' ? 'Fatto oggi' : 'Da Intervals oggi') : 'Cosa hai fatto';
   return '<div class="card"><h3>' + ico('check') + ' ' + head + '</h3>' + acts.map(a =>
-    '<div class="set">' + sportIcon(a.sport === 'other' ? 'road' : a.sport) + '<div class="l"><b>' + esc(a.name) + '</b><small>' + fmtMin(a.min) +
-    (a.sport !== 'strength' ? ' · ' + E.LEVELS[a.level] : '') + (a.load ? ' · carico ' + Math.round(a.load) : '') + '</small></div></div>').join('') +
+    '<button class="set actrow" data-act="' + esc(a.id || '') + '">' + sportIcon(a.sport === 'other' ? 'road' : a.sport) + '<div class="l"><b>' + esc(a.name) + '</b><small>' + fmtMin(a.min) +
+    (a.sport !== 'strength' ? ' · ' + E.LEVELS[a.level] : '') + (a.load ? ' · carico ' + Math.round(a.load) : '') + '</small></div>' + ico('chev') + '</button>').join('') +
     (p && p.rest && isT ? '<div class="mut" style="font-size:12.5px;margin-top:6px">Nessun problema: le prossime proposte ne tengono conto.</div>' : '') + '</div>';
 }
+/* ---------- Dettaglio di un'attività registrata (da Intervals) ---------- */
+async function icuAct(path) {
+  const r = await fetch('https://intervals.icu/api/v1/activity/' + path, { headers: { Authorization: 'Basic ' + btoa('API_KEY:' + S.icu.key.trim()) } });
+  if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+  return r.json();
+}
+const hms = s => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? h + 'h' + String(m).padStart(2, '0') : m + "'" + String(x).padStart(2, '0') + '"'; };
+const n1 = v => String(Math.round(v * 10) / 10).replace('.', ',');
+function streamSVG(data, color, label, unit, fmt) {
+  const v = (data || []).filter(x => x != null && !isNaN(x));
+  if (v.length < 10) return '';
+  const N = 240, step = Math.max(1, Math.floor(data.length / N)), pts = [];
+  for (let i = 0; i < data.length; i += step) { const sl = data.slice(i, i + step).filter(x => x != null); if (sl.length) pts.push(sl.reduce((a, b) => a + b, 0) / sl.length); }
+  let mn = Math.min(...pts), mx = Math.max(...pts); if (mx - mn < 1) mx = mn + 1;
+  const W = 600, H = 90, path = pts.map((y, i) => (i ? 'L' : 'M') + (i / (pts.length - 1) * W).toFixed(1) + ' ' + (H - 4 - (y - mn) / (mx - mn) * (H - 8)).toFixed(1)).join('');
+  const avg = v.reduce((a, b) => a + b, 0) / v.length;
+  return '<div class="strm"><div class="sh"><b>' + label + '</b><span>media ' + (fmt ? fmt(avg) : Math.round(avg)) + unit + ' · max ' + (fmt ? fmt(Math.max(...v)) : Math.round(Math.max(...v))) + unit + '</span></div>' +
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"><path d="' + path + ' L' + W + ' ' + H + ' L0 ' + H + 'Z" fill="' + color + '" opacity=".14"/><path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></div>';
+}
+function zonesHTML(title, secs, names, colors) {
+  const tot = secs.reduce((a, b) => a + (b || 0), 0); if (!tot) return '';
+  return '<div class="zn"><div class="sh"><b>' + title + '</b></div>' + secs.map((x, i) => !x ? '' :
+    '<div class="zr"><span>' + names[i] + '</span><i><em style="width:' + (x / tot * 100).toFixed(1) + '%;background:' + colors[i] + '"></em></i><small>' + hms(x) + ' · ' + Math.round(x / tot * 100) + '%</small></div>').join('') + '</div>';
+}
+async function openActSheet(id) {
+  if (!id) { toast('Dettaglio non ancora disponibile: tocca Aggiorna nel Profilo'); return; }
+  if (!icuOn()) { toast('Collega Intervals.icu nel Profilo'); return; }
+  openSheet('<div class="guide"><h2>Attività</h2><p class="intro">' + ico('sync', 'spin') + ' Carico i dati da Intervals.icu…</p></div>');
+  let a, st = [];
+  try {
+    a = await icuAct(encodeURIComponent(id));
+    try { st = await icuAct(encodeURIComponent(id) + '/streams.json?types=heartrate,watts,altitude,cadence,velocity_smooth'); } catch (e) {}
+  } catch (e) { $('#sheetBody').innerHTML = '<div class="guide"><h2>Attività</h2><p class="intro">Non riesco a leggere l\'attività (' + (e.status || 'rete') + '). Riprova più tardi o aprila su Intervals.icu.</p><a class="btn full" target="_blank" rel="noopener" href="https://intervals.icu/activities/' + encodeURIComponent(id) + '">Apri su Intervals.icu</a></div>'; return; }
+  if (!sheetOpen()) return;
+  const sp = E.activitySport(a.type), P = S.profile, tiles = [];
+  const add = (v, lab) => { if (v != null && v !== '' && v !== '—') tiles.push('<div class="tile"><b class="num">' + v + '</b><small>' + lab + '</small></div>'); };
+  add(hms(a.moving_time || a.elapsed_time), 'tempo in movimento');
+  if (a.distance > 100) add(n1(a.distance / 1000) + ' km', 'distanza');
+  if (a.total_elevation_gain > 5) add(Math.round(a.total_elevation_gain) + ' m', 'dislivello');
+  if (a.average_speed > 0.5 && a.distance > 100) add(sp === 'run' ? (() => { const s2 = 1000 / a.average_speed; return Math.floor(s2 / 60) + ':' + String(Math.round(s2 % 60)).padStart(2, '0') + '/km'; })() : n1(a.average_speed * 3.6) + ' km/h', sp === 'run' ? 'passo medio' : 'velocità media');
+  const aw = a.icu_average_watts || a.average_watts, np = a.icu_weighted_avg_watts || a.weighted_average_watts;
+  if (aw) add(Math.round(aw) + ' W', 'potenza media');
+  if (np) add(Math.round(np) + ' W', 'potenza normalizzata');
+  let IF = a.icu_intensity != null ? +a.icu_intensity : null; if (IF > 3) IF = IF / 100;
+  if (IF) add(String(IF.toFixed(2)).replace('.', ','), 'intensità (IF)');
+  if (a.icu_training_load) add(Math.round(a.icu_training_load), 'carico');
+  if (a.average_heartrate) add(Math.round(a.average_heartrate) + '', 'FC media');
+  if (a.max_heartrate) add(Math.round(a.max_heartrate) + '', 'FC max');
+  if (a.average_cadence) add(Math.round(a.average_cadence) + '', sp === 'run' ? 'cadenza (passi/min)' : 'cadenza (rpm)');
+  if (a.calories) add(Math.round(a.calories) + '', 'kcal');
+  if (np && aw) add(String((np / aw).toFixed(2)).replace('.', ','), 'variabilità (VI)');
+  if (a.icu_efficiency_factor) add(String((+a.icu_efficiency_factor).toFixed(2)).replace('.', ','), 'efficienza (NP/FC)');
+  if (a.decoupling != null && a.decoupling !== 0) add(n1(a.decoupling) + '%', 'deriva cardiaca');
+  const rpe = +(a.icu_rpe || a.perceived_exertion || 0), feel = +(a.feel || 0);
+  if (rpe) add(rpe + '/10', 'sforzo percepito');
+  if (feel) add(['', 'Ottima', 'Buona', 'Normale', 'Scarsa', 'Pessima'][feel] || feel, 'sensazione');
+  const get = t => { const x = (st || []).find(y => y.type === t); return x && x.data; };
+  const charts = streamSVG(get('watts'), '#FFC940', 'Potenza', ' W') + streamSVG(get('heartrate'), '#FF6A8E', 'Frequenza cardiaca', ' bpm') +
+    streamSVG(get('altitude'), '#7BD88F', 'Altitudine', ' m') + streamSVG(get('cadence'), '#3FD4FF', 'Cadenza', '');
+  let zones = '';
+  const hz = a.icu_hr_zone_times; if (Array.isArray(hz) && hz.length) zones += zonesHTML('Tempo nelle zone cardio', hz.map(Number), hz.map((_, i) => 'Z' + (i + 1)), ['#5E6A82', '#3FD4FF', '#C4FF45', '#FFC940', '#FF6A3D', '#FF3D6E', '#D24BFF']);
+  const pz = a.icu_zone_times; if (Array.isArray(pz) && pz.length) { const pz2 = pz.filter(z => z && z.id && z.id !== 'SS'); zones += zonesHTML('Tempo nelle zone di potenza', pz2.map(z => +z.secs || 0), pz2.map(z => z.id), ['#5E6A82', '#3FD4FF', '#C4FF45', '#FFC940', '#FF6A3D', '#FF3D6E', '#D24BFF', '#D24BFF']); }
+  const when = (a.start_date_local || '').slice(0, 16).replace('T', ' ');
+  $('#sheetBody').innerHTML = '<div class="actd"><div class="meta">' + sportIcon(sp === 'other' ? 'road' : sp) + '<div><h2>' + esc(a.name || a.type) + '</h2><small>' + (when ? longDate(when.slice(0, 10)) + ' · ' + when.slice(11) : '') + (a.device_name ? ' · ' + esc(a.device_name) : '') + '</small></div></div>' +
+    '<div class="tiles at">' + tiles.join('') + '</div>' + charts + zones +
+    (a.description ? '<p class="mut" style="font-size:13px;white-space:pre-line;margin:12px 2px 0">' + esc(String(a.description).slice(0, 600)) + '</p>' : '') +
+    '<a class="btn full" style="margin-top:14px" target="_blank" rel="noopener" href="https://intervals.icu/activities/' + encodeURIComponent(id) + '">' + ico('link') + 'Apri su Intervals.icu</a></div>';
+  void P;
+}
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-act]'); if (b) { e.preventDefault(); openActSheet(b.dataset.act); } });
 function restHTML(p) {
   if (p.illRest) return '<div class="card rest"><div class="big">🤒</div><h2>Riposa e guarisci</h2><p>Con febbre o dolori diffusi allenarsi fa solo danni. Bevi, dormi, e quando stai meglio segnalo nel check-in: SMG ti farà rientrare con calma.</p></div>';
   if (p.special === 'off') return '<div class="card rest"><div class="big">📅</div><h2>Oggi hai un impegno</h2><p>Giorno segnato come impegnato. Se poi trovi un buco, puoi comunque muoverti.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aExtraDay">Ho trovato un buco</button><button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
@@ -1110,6 +1180,7 @@ const GUIDE = [
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Quando da Intervals arriva l'attività vera, il diario mostra quella (nome, sport, durata, livello) con accanto la proposta di SMG. Tocca un giorno passato per vedere cosa hai fatto e la seduta proposta, o per segnarla.</li>
+    <li><b>Dettaglio dell'attività</b>: tocca un'attività (in Oggi o nel giorno del diario) per vedere tutte le statistiche registrate: tempo, distanza, dislivello, velocità, potenza media e normalizzata, intensità, carico, FC media e massima, cadenza, calorie, efficienza, deriva cardiaca, sforzo percepito; poi i grafici di potenza, FC, altitudine e cadenza e il tempo nelle zone. I dati arrivano da Intervals.icu al momento, quindi serve la connessione; in fondo c'è il collegamento per aprirla su Intervals.</li>
     <li><b>Andamento della forma</b>: fitness (azzurro) e fatica (rosa) delle ultime 8 settimane. Se la fitness sale, stai migliorando. Tocca il grafico per i valori del giorno.</li></ul>`],
   ['link', 'Intervals, Garmin, MyWhoosh', `<ul><li><b>SMG → Intervals → Garmin Connect → Fenix ed Edge</b>; e <b>Intervals → MyWhoosh</b> per le sedute indoor.</li>
     <li>Da Garmin a Intervals arrivano attività, sonno, HRV, FC a riposo e peso. FTP e soglie no.</li>
