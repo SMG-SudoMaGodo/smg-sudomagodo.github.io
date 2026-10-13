@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.6.2';
+const APP_V = '1.6.3';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -99,7 +99,7 @@ async function fetchWeather(force) {
   if (!S.loc) return false;
   if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()]) return false;
   const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon +
-    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m&timezone=auto&forecast_days=3';
+    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m,dew_point_2m&timezone=auto&forecast_days=3';
   try {
     const r = await fetch(u); if (!r.ok) throw 0; const j = await r.json(); const days = {};
     j.daily.time.forEach((d, i) => days[d] = { code: j.daily.weather_code[i], tmax: j.daily.temperature_2m_max[i], tmin: j.daily.temperature_2m_min[i],
@@ -107,7 +107,8 @@ async function fetchWeather(force) {
       sunrise: j.daily.sunrise ? j.daily.sunrise[i] : null, sunset: j.daily.sunset ? j.daily.sunset[i] : null });
     // finestra di 3 ore più asciutta tra le 7 e le 19
     if (j.hourly && j.hourly.time) Object.keys(days).forEach(d => {
-      const pr = [], tp = []; j.hourly.time.forEach((h, i) => { if (h.slice(0, 10) === d) { pr[+h.slice(11, 13)] = j.hourly.precipitation_probability[i] || 0; if (j.hourly.temperature_2m) tp[+h.slice(11, 13)] = Math.round(j.hourly.temperature_2m[i]); } });
+      const pr = [], tp = [], dp = []; j.hourly.time.forEach((h, i) => { if (h.slice(0, 10) === d) { const hh = +h.slice(11, 13); pr[hh] = j.hourly.precipitation_probability[i] || 0; if (j.hourly.temperature_2m) tp[hh] = Math.round(j.hourly.temperature_2m[i]); if (j.hourly.dew_point_2m && j.hourly.dew_point_2m[i] != null) dp[hh] = Math.round(j.hourly.dew_point_2m[i]); } });
+      if (dp.length) days[d].hd = Array.from({ length: 24 }, (_, h) => dp[h] == null ? null : dp[h]);
       days[d].hp = Array.from({ length: 24 }, (_, h) => pr[h] || 0); if (tp.length) days[d].ht = Array.from({ length: 24 }, (_, h) => tp[h] == null ? null : tp[h]);
       let best = null;
       for (let h = 7; h <= 16; h++) { const v = Math.max(pr[h] || 0, pr[h + 1] || 0, pr[h + 2] || 0); if (best == null || v < best.v) best = { h, v }; }
@@ -650,13 +651,25 @@ const WXD = c => c <= 1 ? 'Sereno' : c === 2 ? 'Poco nuvoloso' : c === 3 ? 'Nuvo
 const drop = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>';
 const wind = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/></svg>';
 const sunIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M17 18a5 5 0 0 0-10 0M12 9V2M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M16 5l-4 4-4-4"/></svg>';
+// punto di rugiada nelle ore in cui esci: verde fino a 16°, giallo 17-18°, rosso 19-21°, viola da 22°
+const DEW_C = v => v <= 16 ? '#4ADE80' : v <= 18 ? '#FACC15' : v <= 21 ? '#F87171' : '#C084FC';
+function dewAt(d, w) {
+  if (!w || !w.hd) return null;
+  const at = E.startMin(S.profile, d), cfg = E.dayCfg(S, d), h0 = Math.floor(at / 60), h1 = Math.min(23, Math.floor((at + Math.min(cfg.max || 60, 120)) / 60));
+  let v = null; for (let h = h0; h <= h1; h++) if (w.hd[h] != null) v = v == null ? w.hd[h] : Math.max(v, w.hd[h]);
+  return v == null ? null : { v, h: h0 };
+}
+function dewHTML(d, w) {
+  const x = dewAt(d, w); if (!x) return '';
+  return '<span class="dew" title="Punto di rugiada alle ' + x.h + '"><i style="background:' + DEW_C(x.v) + '"></i>Rugiada ' + x.v + '°</span>';
+}
 function wxDayHTML(d, label, cls) {
   const w = wxFor(d);
   if (!w) return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="desc" style="margin-top:10px">Previsioni non disponibili</div></div>';
   return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="main">' + wxIcon(w.code) +
     '<div><div class="tmax num">' + Math.round(w.tmax) + '°</div><div class="tmin num">' + Math.round(w.tmin) + '°</div></div></div>' +
     '<div class="desc">' + WXD(w.code) + '</div><div class="meta"><span style="color:' + (w.rain >= 50 ? 'var(--hot2)' : 'inherit') + '">' + drop + w.rain + '%' + (w.mm >= 0.5 ? ' · ' + Math.round(w.mm) + ' mm' : '') + '</span>' +
-    '<span>' + wind + Math.round(w.wind) + ' km/h</span>' + (w.sunset ? '<span title="Tramonto">' + sunIco + w.sunset.slice(11, 16) + '</span>' : '') + '</div></div>';
+    '<span>' + wind + Math.round(w.wind) + ' km/h</span>' + dewHTML(d, w) + (w.sunset ? '<span title="Tramonto">' + sunIco + w.sunset.slice(11, 16) + '</span>' : '') + '</div></div>';
 }
 // seduta probabile di domani: stessa logica della proposta, come se oggi facessi la seduta prevista
 function tomorrowPreview(d) {
@@ -1184,6 +1197,7 @@ const GUIDE = [
     <p>Il <b>lunedì</b> (e il martedì, finché non lo chiudi) in cima a Oggi trovi il riepilogo della settimana appena chiusa: sedute, tempo, sedute dure, variazione della fitness e cosa ti aspetta.</p>`],
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
+    <li><b>Punto di rugiada</b> (nelle ore in cui esci): dice quanto è afosa l'aria, cioè quanto fatichi a smaltire il calore. <span style="color:#4ADE80">●</span> fino a 16° confortevole, <span style="color:#FACC15">●</span> 17–18° si sente, <span style="color:#F87171">●</span> 19–21° pesante: rallenta il ritmo e bevi di più, <span style="color:#C084FC">●</span> da 22° molto pesante: solo sedute facili o rulli con ventilatore. Conta soprattutto per la corsa.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Quando da Intervals arriva l'attività vera, il diario mostra quella (nome, sport, durata, livello) con accanto la proposta di SMG. Tocca un giorno passato per vedere cosa hai fatto e la seduta proposta, o per segnarla.</li>
     <li><b>Dettaglio dell'attività</b>: tocca un'attività (in Oggi o nel giorno del diario) per vedere tutte le statistiche registrate: tempo, distanza, dislivello, velocità, potenza media e normalizzata, intensità, carico, FC media e massima, cadenza, calorie, efficienza, deriva cardiaca, sforzo percepito; poi i grafici di potenza, FC, altitudine e cadenza e il tempo nelle zone. I dati arrivano da Intervals.icu al momento, quindi serve la connessione; in fondo c'è il collegamento per aprirla su Intervals.</li>

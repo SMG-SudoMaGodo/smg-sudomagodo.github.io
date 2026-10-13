@@ -664,9 +664,9 @@ const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Mat
 function slotWx(w, at, dur) {
   if (!w || !w.hp) return null;
   const h0 = Math.floor(at / 60), h1 = Math.min(23, Math.floor((at + (dur || 90)) / 60));
-  let rain = 0, temp = null;
-  for (let h = h0; h <= h1; h++) { rain = Math.max(rain, w.hp[h] || 0); if (w.ht && w.ht[h] != null) temp = temp == null ? w.ht[h] : Math.min(temp, w.ht[h]); }
-  return { rain, temp };
+  let rain = 0, temp = null, dew = null;
+  for (let h = h0; h <= h1; h++) { rain = Math.max(rain, w.hp[h] || 0); if (w.ht && w.ht[h] != null) temp = temp == null ? w.ht[h] : Math.min(temp, w.ht[h]); if (w.hd && w.hd[h] != null) dew = dew == null ? w.hd[h] : Math.max(dew, w.hd[h]); }
+  return { rain, temp, dew };
 }
 function weatherBad(w, slot) {
   if (!w) return 0;
@@ -852,6 +852,8 @@ function propose(state, date, opts) {
   else if (dark && sport === 'indoor') reasons.push('Alle ' + hhmm(at) + ' è già buio (tramonto ' + hhmm(sun.set) + '): rulli');
   if (dark && (sport === 'mtb' || sport === 'road')) reasons.push('Si esce col buio: luci anteriore e posteriore cariche. Se non ti va, scegli Rulli');
   else if (sun && !dark && at + dur > sun.set + 10 && (sport === 'mtb' || sport === 'road')) reasons.push('Tramonto alle ' + hhmm(sun.set) + ': per il rientro porta le luci');
+  if (slot && slot.dew != null && slot.dew >= 19 && (sport === 'run' || (sport !== 'indoor' && level >= 3)))
+    reasons.push(slot.dew >= 22 ? 'Punto di rugiada ' + slot.dew + '°: aria molto afosa, ritmo più lento del solito e tanta acqua' : 'Punto di rugiada ' + slot.dew + '°: aria afosa, rallenta un po\' e bevi di più');
   if (dark && sport === 'run') reasons.push('Col buio: frontale o luce e qualcosa di riflettente');
   if (tpl.test) reasons.push(P.testSoon ? 'Test FTP chiesto da te: oggi sei fresco, aggiorniamo le zone' : blockWeek(P, date) === 0 ? 'Prima settimana dopo lo scarico: sei fresco, aggiorniamo le zone' : 'Sono passate più di 9 settimane dall\'ultimo test: aggiorniamo le zone');
   if (level >= 4 && ctx.weekHard === 0) reasons.push('Prima seduta intensa della settimana');
