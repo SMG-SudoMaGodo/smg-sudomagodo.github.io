@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.6.4';
+const APP_V = '1.7';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -498,7 +498,7 @@ function metric(key, label, unit, d, better, fmt) {
     const good = better === 'up' ? diff > 0 : diff < 0;
     dl = rel ? '<span class="d">in media</span>' : '<span class="d ' + (good ? 'up' : 'down') + '">' + (diff > 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(diff)) + ' vs media</span>';
   }
-  return '<div class="m"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC[key === 'sleepH' ? 'sleep' : key] + '</svg>' + label + '</div>' +
+  return '<div class="m" data-trend="' + key + '" role="button"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC[key === 'sleepH' ? 'sleep' : key] + '</svg>' + label + '</div>' +
     '<div class="val num">' + (fmt ? fmt(v) : Math.round(v)) + '<small>' + unit + '</small></div>' + dl +
     spark(series(key, d, 7), 'var(--hot)', hs ? hs.mean : a, hs ? 'norma' : 'media') + '</div>';
 }
@@ -512,11 +512,65 @@ function healthHTML(d) {
   ];
   if (c.tsb != null && c.tsb !== '') {
     const t = +c.tsb; const txt = t < -25 ? 'Molto affaticato' : t < -10 ? 'Carico, in costruzione' : t <= 5 ? 'Equilibrio' : 'Fresco';
-    tiles.push('<div class="m"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC.form + '</svg>Forma</div><div class="val num">' + (t > 0 ? '+' : '') + t + '</div><span class="d">' + txt + '</span>' + spark(series('tsb', d, 7), 'var(--hot)', 0, 'zero') + '</div>');
+    tiles.push('<div class="m" data-trend="tsb" role="button"><div class="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' + IC.form + '</svg>Forma</div><div class="val num">' + (t > 0 ? '+' : '') + t + '</div><span class="d">' + txt + '</span>' + spark(series('tsb', d, 7), 'var(--hot)', 0, 'zero') + '</div>');
   }
   const html = tiles.filter(Boolean);
   return html.length ? '<div class="hm">' + html.join('') + '</div>' : '';
 }
+/* ---------- Andamento di un indicatore (tocco su un riquadro) ---------- */
+const TREND = { hrv: ['HRV notturna', ' ms', 'up'], rhr: ['FC a riposo', ' bpm', 'down'], sleep: ['Punteggio sonno', '', 'up'], sleepH: ['Ore di sonno', ' h', 'up'], garmin: ['Training Readiness', '', 'up'], tsb: ['Forma', '', null] };
+let trendDays = 30;
+function trendHTML(key) {
+  const [lab, unit] = TREND[key], d = today(), N = trendDays;
+  const vals = series(key, d, N), pts = vals.map((v, i) => [i, v]).filter(p => p[1] != null);
+  const fmt = v => key === 'sleepH' ? n1(v) : key === 'tsb' ? (v > 0 ? '+' : '') + Math.round(v) : String(Math.round(v));
+  const chips = '<div class="chips" style="margin:2px 0 10px">' + [14, 30, 60].map(n => '<button class="chip' + (n === N ? ' on' : '') + '" data-tdays="' + n + '">' + n + ' giorni</button>').join('') + '</div>';
+  if (pts.length < 2) return '<div class="guide"><h2>' + lab + '</h2>' + chips + '<p class="intro">Pochi dati in questo periodo.</p></div>';
+  const hs = key === 'hrv' ? E.hrvStatus(S.checkins, d) : null;
+  const ref = key === 'tsb' ? 0 : hs ? hs.mean : avgPrev(key, d);
+  const ys = pts.map(p => p[1]).concat(ref != null ? [ref] : []).concat(hs ? [hs.lo, hs.hi] : []);
+  let lo = Math.min(...ys), hi = Math.max(...ys); const pad = (hi - lo) * 0.12 || 1; lo -= pad; hi += pad;
+  const W = 340, H = 170, L = 30, R = 8, T = 10, B = 22, X = i => L + i / (N - 1) * (W - L - R), Y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const line = pts.map(([i, v], k) => (k ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
+  const ticks = [lo + pad, (lo + hi) / 2, hi - pad].map(v => '<text x="' + (L - 4) + '" y="' + (Y(v) + 3) + '" text-anchor="end">' + fmt(v) + '</text><line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" class="gl"/>').join('');
+  const dl = i => { const x = E.parse(E.addDays(d, -(N - 1 - i))); return x.getDate() + '/' + (x.getMonth() + 1); };
+  const xl = [0, Math.floor((N - 1) / 2), N - 1].map(i => '<text x="' + X(i) + '" y="' + (H - 6) + '" text-anchor="' + (i ? i === N - 1 ? 'end' : 'middle' : 'start') + '">' + (i === N - 1 ? 'oggi' : dl(i)) + '</text>').join('');
+  const band = hs ? '<rect x="' + L + '" y="' + Y(hs.hi) + '" width="' + (W - L - R) + '" height="' + (Y(hs.lo) - Y(hs.hi)) + '" class="band"/>' : '';
+  const refl = ref != null ? '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(ref) + '" y2="' + Y(ref) + '" class="ref"/>' : '';
+  const dots = pts.map(([i, v]) => '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(v).toFixed(1) + '" r="' + (N <= 30 ? 2.6 : 1.8) + '"/>').join('');
+  const v = pts.map(p => p[1]), avg = a => a.reduce((x, y) => x + y, 0) / a.length, last7 = vals.slice(-7).filter(x => x != null);
+  const stat = (a, b) => '<div class="tile"><b class="num">' + a + '</b><small>' + b + '</small></div>';
+  const note = key === 'hrv' ? 'La fascia è la tua norma (60 giorni): conta la media dei 7 giorni rispetto alla fascia, non la singola notte.' :
+    key === 'rhr' ? 'Più bassa è meglio. Qualche battito sopra la tua media per più giorni è un segnale di stanchezza o malanno.' :
+    key === 'tsb' ? 'Fitness meno fatica, da Intervals: sopra lo zero sei fresco, molto sotto hai carico accumulato.' :
+    key === 'garmin' ? 'Il valore del Fenix: se lo inserisci, il semaforo fa la media 50/50 con il punteggio di SMG.' : 'Sotto 65 pesa sul semaforo.';
+  return '<div class="guide trend"><h2>' + lab + '</h2>' + chips +
+    '<div class="tv" id="tv"><b>' + fmt(v[v.length - 1]) + unit + '</b><span>' + (pts[pts.length - 1][0] === N - 1 ? 'oggi' : dl(pts[pts.length - 1][0])) + '</span></div>' +
+    '<svg id="tsvg" viewBox="0 0 ' + W + ' ' + H + '" data-n="' + N + '">' + band + ticks + refl + '<path d="' + line + '" class="ln"/>' + dots + xl + '<line id="tcur" class="cur" y1="' + T + '" y2="' + (H - B) + '" x1="-9" x2="-9"/></svg>' +
+    '<div class="tiles" style="margin-top:12px">' + stat(last7.length ? fmt(avg(last7)) : '–', 'media 7 gg') + stat(fmt(avg(v)), 'media ' + N + ' gg') + stat(fmt(Math.min(...v)), 'minimo') + stat(fmt(Math.max(...v)), 'massimo') + '</div>' +
+    '<p class="mut" style="font-size:12.5px;margin:4px 2px 0">' + (hs ? 'Norma ' + Math.round(hs.lo) + '–' + Math.round(hs.hi) + ' ms. ' : ref != null && key !== 'tsb' ? 'Linea tratteggiata: la tua media degli ultimi 14 giorni. ' : '') + note + ' Tocca o scorri sul grafico per leggere i singoli giorni.</p></div>';
+}
+function openTrend(key) {
+  if (!TREND[key]) return;
+  const bind = () => {
+    document.querySelectorAll('[data-tdays]').forEach(b => b.onclick = () => { trendDays = +b.dataset.tdays; $('#sheetBody').innerHTML = trendHTML(key); bind(); });
+    const svg = document.getElementById('tsvg'); if (!svg) return;
+    const N = +svg.dataset.n, vals = series(key, today(), N), [, unit] = TREND[key];
+    const fmt = v => key === 'sleepH' ? n1(v) : key === 'tsb' ? (v > 0 ? '+' : '') + Math.round(v) : String(Math.round(v));
+    const pick = e => {
+      const r = svg.getBoundingClientRect(), cx = ((e.touches ? e.touches[0].clientX : e.clientX) - r.left) / r.width * 340;
+      let i = Math.round((cx - 30) / (340 - 38) * (N - 1)); i = Math.max(0, Math.min(N - 1, i));
+      const x = (30 + i / (N - 1) * (340 - 38)).toFixed(1), c = document.getElementById('tcur'); c.setAttribute('x1', x); c.setAttribute('x2', x);
+      const dd = E.addDays(today(), -(N - 1 - i));
+      document.getElementById('tv').innerHTML = '<b>' + (vals[i] == null ? '–' : fmt(vals[i]) + unit) + '</b><span>' + (i === N - 1 ? 'oggi' : longDate(dd)) + '</span>';
+    };
+    svg.addEventListener('click', pick); svg.addEventListener('touchstart', pick, { passive: true }); svg.addEventListener('touchmove', pick, { passive: true });
+  };
+  openSheet(trendHTML(key), bind);
+}
+document.addEventListener('click', e => { const m = e.target.closest && e.target.closest('[data-trend]'); if (m) openTrend(m.dataset.trend); });
+// il grafico della seduta apre (o chiude) il dettaglio dei blocchi
+document.addEventListener('click', e => { const c = e.target.closest && e.target.closest('.wo svg.chart'); if (!c) return; const det = c.closest('.wo').querySelector('details.steps'); if (det) { det.open = !det.open; if (det.open) det.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
 // come è calcolato il punteggio, voce per voce
 function scoreDetail(rd) {
   if (!rd.parts) return '';
@@ -1167,7 +1221,7 @@ const GUIDE = [
     <p>Se i campi della notte sono vuoti, l'orologio non ha ancora sincronizzato: apri Garmin Connect, poi riapri SMG o premi Aggiorna nel Profilo. Va bene anche la sola faccina.</p>`],
   ['tl', 'Semaforo e indicatori', `<p><b>Verde</b>: via libera, anche sedute dure. <b>Arancione</b>: al massimo ritmo medio. <b>Rosso</b>: solo recupero; con un punteggio molto basso, riposo.</p>
     <p>Il punteggio unisce sensazione, HRV, FC a riposo, sonno, forma ed eventuali dolori.</p>
-    <p><b>Come leggere i riquadri</b>: in alto il valore di stanotte, sotto il confronto in parole (verde se va bene, rosso se no), in basso l'andamento degli ultimi 7 giorni. La <b>linea tratteggiata</b> è il tuo riferimento: se la linea azzurra ci sta sopra o sotto, sei sopra o sotto il tuo solito.</p>
+    <p><b>Come leggere i riquadri</b>: in alto il valore di stanotte, sotto il confronto in parole (verde se va bene, rosso se no), in basso l'andamento degli ultimi 7 giorni. La <b>linea tratteggiata</b> è il tuo riferimento: se la linea azzurra ci sta sopra o sotto, sei sopra o sotto il tuo solito. <b>Tocca un riquadro</b> per l'andamento a 14, 30 o 60 giorni, con media, minimo, massimo e il valore di ogni giorno (tocca o scorri sul grafico).</p>
     <ul><li><b>HRV</b>: più alta è meglio. Conta la media degli ultimi 7 giorni rispetto alla tua norma (la fascia indicata, calcolata su 60 giorni). Una notte storta pesa poco. Nelle prime settimane il confronto è con la media semplice.</li>
     <li><b>FC a riposo</b>: più bassa è meglio. Qualche battito sopra il solito è un segnale di stanchezza o di malanno in arrivo.</li>
     <li><b>Sonno</b>: il punteggio del Fenix; sotto 65 pesa sul semaforo.</li>
@@ -1177,6 +1231,7 @@ const GUIDE = [
     <p><b>Malanno</b> (nel check-in): con raffreddore o mal di gola solo sedute facili e più corte; con febbre o dolori diffusi riposo. Segnalo ogni giorno finché dura: dopo, 2-3 giorni di rientro graduale prima della qualità.</p>
     <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati. In <b>Come è calcolato il punteggio</b> trovi il contributo di ogni voce.</p>`],
   ['bolt', 'La seduta del giorno', `<ul><li><b>Rilancia</b>: un'alternativa equivalente, se quella proposta non ti ispira.</li>
+    <li>Tocca il <b>grafico della seduta</b> per aprire o chiudere il dettaglio dei blocchi.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
     <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola. Con <b>Oggi salto</b> la seduta sparisce anche da Garmin e MyWhoosh, la settimana si riequilibra (una seduta dura saltata può tornare nei giorni dopo) e puoi scegliere un'alternativa breve di mobilità o forza leggera in base al tempo che hai. <b>Annulla</b> la rimette.</li>
