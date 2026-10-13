@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.6.3';
+const APP_V = '1.6.4';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -97,7 +97,8 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 function wxFor(d) { return S.wx && S.wx.days && S.wx.days[d] || null; }
 async function fetchWeather(force) {
   if (!S.loc) return false;
-  if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()]) return false;
+  // si riscarica se i dati sono vecchi o se mancano campi aggiunti in una versione nuova (es. punto di rugiada)
+  if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()] && S.wx.days[today()].hd) return false;
   const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon +
     '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m,dew_point_2m&timezone=auto&forecast_days=3';
   try {
