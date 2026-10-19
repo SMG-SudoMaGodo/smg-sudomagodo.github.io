@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.7';
+const APP_V = '1.8';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -242,6 +242,7 @@ async function icuSync(quiet) {
     if (!quiet) toast(e.status === 401 || e.status === 403 ? 'Chiave API non valida' : 'Sincronizzazione non riuscita');
   }
   busy.sync = false; render();
+  testAutoCheck();
 }
 const ICU_SPORT = { VirtualRide: 'indoor', MountainBikeRide: 'mtb', GravelRide: 'mtb', Ride: 'road', Run: 'run' };
 async function icuRebuild(from, to, byDay) {
@@ -365,7 +366,11 @@ function workoutHTML(p, ro) {
     (p.deload ? '<div><span class="tag">Scarico</span></div>' : '') + '</div>' + chartSVG(sections) + '</div><div class="body">' +
     '<p class="desc">' + esc(t.desc) + '</p>';
   if (p.challenge) h += '<div class="challenge">' + ico('flag') + '<div><b>Sfida del giorno</b><span>' + esc(p.challenge) + '</span></div></div>';
-  if (t.setup && t.setup[p.sport] && p.status !== 'done') h += '<div class="challenge" style="background:rgba(45,180,242,.07);border-color:rgba(45,180,242,.4)">' + ico('flag') + '<div><b style="color:var(--hot2)">Come impostare il test</b><ul style="margin:4px 0 0;padding-left:16px;font-size:13.5px">' + t.setup[p.sport].map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div></div>';
+  if (t.test && p.status !== 'done') { const G = testGuess();
+    h += '<div class="challenge" style="background:rgba(45,180,242,.07);border-color:rgba(45,180,242,.4)">' + ico('flag') + '<div style="flex:1"><b style="color:var(--hot2)">Oggi c\'è il test FTP</b><span>' +
+      (p.sport === 'indoor' ? 'Fenix e MyWhoosh avviati insieme. ERG acceso nel riscaldamento, spento solo nei 20 minuti. Fanno fede i watt degli Stages sul Fenix.' : 'Bici da strada con gli Stages, su una salita regolare o un rettilineo senza incroci.') +
+      ' Obiettivo: circa <strong style="color:var(--text)">' + Math.round(G / 0.95) + ' W</strong> di media nei 20 minuti.</span>' +
+      (ro ? '' : '<button class="btn hot sm full" id="aTestHow" style="margin-top:8px">' + ico('flag') + 'Istruzioni passo passo</button>') + '</div></div>'; }
   if (st.min >= 90 && p.sport !== 'run' || st.min >= 75 && p.sport === 'run') h += fuelHTML(st.min, p.sport, wxFor(p.date));
   if (!ro && p.reasons && p.reasons.length) h += '<div class="reasons">' + p.reasons.map(r => '<span class="pill">' + esc(r) + '</span>').join('') + '</div>';
   if (!p.free) h += '<details class="steps"' + (ro ? ' open' : '') + '><summary>Dettaglio della seduta ' + ico('chev') + '</summary>' + stepsHTML(sections, p.sport) + '</details>';
@@ -399,8 +404,9 @@ function workoutHTML(p, ro) {
     } else {
       h += p.status === 'done'
         ? '<div class="done-banner">' + ico('check') + '<div><b>Fatta! Sudato e goduto.</b><span>' + (p.via === 'icu' ? 'Rilevata da Intervals.icu' : 'Segnata a mano') + '</span></div></div>' +
-          (t.test ? (p.testRes ? '<div class="src" style="margin:10px 0 0">' + ico('check') + 'Test registrato: FTP ' + p.testRes.ftp + ' W' + (p.testRes.lthr ? ' · FC di soglia ' + p.testRes.lthr + ' bpm' : '') + '</div>'
-                                : '<button class="btn hot full" id="aTestRes" style="margin-top:8px">' + ico('flag') + 'Inserisci il risultato del test</button>') : '')
+          (t.test ? (p.testRes ? '<div class="src" style="margin:10px 0 0">' + ico('check') + (p.testRes.kept ? 'Test: ' + p.testRes.w + ' W nei 20 minuti · FTP lasciata a ' + p.testRes.ftp + ' W' : 'Test registrato: FTP ' + p.testRes.ftp + ' W' + (p.testRes.lthr ? ' · FC di soglia ' + p.testRes.lthr + ' bpm' : '')) + '</div>'
+                                : p.testAuto ? '<button class="btn hot full" id="aTestRes" style="margin-top:8px">' + ico('flag') + 'Test letto: ' + p.testAuto.w + ' W nei 20 minuti · aggiorno l\'FTP?</button>'
+                                : '<button class="btn hot full" id="aTestRes" style="margin-top:8px">' + ico('flag') + (icuOn() ? 'Risultato del test (lo leggo da Intervals)' : 'Inserisci il risultato del test') + '</button>') : '')
         : '<div class="done-banner skip">' + ico('x') + '<div style="flex:1"><b>Seduta saltata</b><span>Nessun problema: le prossime sedute tengono conto che oggi non l\'hai fatta.</span></div></div>' +
           (p.altExtra ? '' : '<button class="btn sm full" id="aAlt" style="margin-top:8px">' + ico('strength') + 'Proponimi qualcosa di breve</button>');
       h += '<button class="btn ghost sm full" id="aUndo" style="margin-top:8px">' + ico('undo') + 'Annulla</button>';
@@ -899,6 +905,7 @@ function bindOggi(p) {
     () => { document.getElementById('goProf').onclick = () => { closeSheet('profilo'); }; }));
   on('aDone', () => { const x = S.plans[d]; x.status = 'done'; x.via = 'manual'; save(); render(); if (E.TEMPLATES[x.tid] && E.TEMPLATES[x.tid].test) { openTestSheet(d); return; } toast('Grande! Sudato e goduto 💪'); window.scrollTo({ top: 0, behavior: 'smooth' }); });
   on('aTestRes', () => openTestSheet(d));
+  on('aTestHow', () => openTestHowSheet(S.plans[d]));
   on('aSkip', () => {
     const x = S.plans[d]; x.status = 'skipped'; delete x.altExtra;
     if (x.pushed) { x.pushed = false; icuDelete(d); }
@@ -1245,7 +1252,7 @@ const GUIDE = [
     <li>Sport, da ottobre a marzo: <b>qualità sui rulli</b> (sedute dure a potenza, in ERG) e <b>volume fuori</b> (fondo e lunghi in MTB/gravel, rulli solo se piove). Da aprile a settembre più spazio alla strada e meno ai rulli.</li>
     <li>Sui rulli al massimo 70 minuti (si cambia nel Profilo, sotto "La tua settimana").</li>
     <li>Evita le sedute fatte di recente e lo sport di ieri.</li>
-    <li><b>Test FTP</b>: lo propone nella prima settimana dopo lo scarico, quando sei fresco, se sono passate almeno 6 settimane dall'ultimo (oltre 9 settimane anche in altre settimane, mai durante lo scarico). Solo con semaforo verde, di lunedì, mercoledì o sabato, sui rulli o con la bici da strada: sempre con gli <b>Stages</b>. Sui rulli il Tacx resta la sorgente primaria di MyWhoosh: i 20 minuti arrivano senza ERG (se non si spegne da solo, spegnilo tu) e fai fede ai watt degli Stages sul Fenix. <b>Rilancia</b> lo rimanda.</li>
+    <li><b>Test FTP</b>: lo propone nella prima settimana dopo lo scarico, quando sei fresco, se sono passate almeno 6 settimane dall'ultimo (oltre 9 settimane anche in altre settimane, mai durante lo scarico). Solo con semaforo verde, di lunedì, mercoledì o sabato, sui rulli o con la bici da strada: sempre con gli <b>Stages</b>. Sui rulli il Tacx resta la sorgente primaria di MyWhoosh: i 20 minuti arrivano senza ERG (se non si spegne da solo, spegnilo tu) e fai fede ai watt degli Stages sul Fenix. Il giorno del test, sotto la seduta, <b>Istruzioni passo passo</b> spiega tutto: preparazione, partenza di Fenix e MyWhoosh, ritmo minuto per minuto (calcolato dall'FTP che ti aspetti) e cosa fare dopo. <b>Rilancia</b> lo rimanda.</li>
     <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
     <p>Le etichette sotto la seduta spiegano il perché della scelta. Nelle sedute oltre 90 minuti (75 di corsa) trovi anche le indicazioni di <b>rifornimento</b>, adattate al meteo.</p>`],
   ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>
@@ -1264,8 +1271,8 @@ const GUIDE = [
   ['indoor', 'Rulli e potenza', `<ul><li><b>Su MyWhoosh</b> il Tacx è l'unico misuratore e comanda l'ERG. Gli Stages non si collegano a MyWhoosh: restano solo sul <b>Fenix</b>, che registra la stessa seduta. Sul Fenix puoi avviare anche la seduta SMG (stessa durata, passi automatici, autovalutazione a fine allenamento): fai partire insieme Fenix e MyWhoosh e spegni sul Fenix gli avvisi di obiettivo, perché con Tacx e Stages che leggono diverso suonerebbero di continuo. Sul Fenix non abbinare il Tacx come rullo o come potenza. Su Intervals tieni solo l'attività del Fenix (l'importazione da MyWhoosh è disattivata); su Strava tieni quella di MyWhoosh, per il dislivello virtuale.</li>
     <li><b>Prima di ogni seduta</b> azzera gli Stages dal Fenix (Calibra, pedivella ferma in verticale). Ogni tanto calibra anche il Tacx dall'app Tacx.</li>
     <li><b>Confronto Tacx / Stages</b>, una volta sola (Profilo → <b>Tacx e Stages</b>): dopo una seduta regolare scrivi i watt medi letti su MyWhoosh e sul Fenix. Entro il 3% non serve niente. Oltre, SMG ti dice quale FTP impostare su MyWhoosh (FTP × watt Tacx ÷ watt Stages), così in ERG pedali ai watt giusti; su Intervals e Garmin resta l'FTP vera. Rifallo solo se cambi qualcosa (batteria degli Stages, aggiornamento del Tacx).</li>
-    <li><b>Test FTP</b>: ERG acceso per riscaldamento, allunghi e defaticamento; spento solo per i 20 minuti, in cui regoli lo sforzo con i rapporti guardando i watt sul Fenix. Lap all'inizio e alla fine dei 20 minuti: il risultato si legge lì. I test di Garmin e MyWhoosh hanno protocolli diversi: per confrontare i risultati nel tempo usa sempre quello di SMG.</li></ul>`],
-  ['user', 'Profilo', `<ul><li><b>Test FTP</b>: vedi quando arriva il prossimo; <b>Anticipa</b> lo fa proporre al primo giorno verde di qualità. Dopo il test tocca <b>Inserisci il risultato</b> (anche dalla seduta): potenza media e FC media del Lap dei 20 minuti sul Fenix, cioè dagli Stages. SMG calcola l'FTP (95%), la scrive su Intervals.icu insieme alla FC di soglia e ti ricorda di aggiornare MyWhoosh e Garmin Connect. Se cambi l'FTP direttamente su Intervals, SMG lo prende come nuovo test.</li>
+    <li><b>Test FTP</b>: ERG acceso per riscaldamento, allunghi e defaticamento; spento solo per i 20 minuti, in cui regoli lo sforzo con i rapporti guardando i watt sul Fenix. Fenix e MyWhoosh partono insieme e restano attivi tutti e due per tutta la seduta: MyWhoosh comanda il Tacx, il Fenix registra gli Stages e il risultato sono i suoi watt. Scegli un percorso piatto su MyWhoosh. Il Lap del Fenix parte da solo all'inizio dei 20 minuti. I test di Garmin e MyWhoosh hanno protocolli diversi: per confrontare i risultati nel tempo usa sempre quello di SMG.</li></ul>`],
+  ['user', 'Profilo', `<ul><li><b>Test FTP</b>: vedi quando arriva il prossimo; <b>Anticipa</b> lo fa proporre al primo giorno verde di qualità. Dopo il test non devi scrivere niente: quando l'attività del Fenix arriva su Intervals, SMG trova da sola i 20 minuti con la potenza media più alta (dagli Stages), ti mostra potenza e FC medie e ti <b>chiede se aggiornare l'FTP</b> (95% della potenza). Puoi correggere i valori, confermare (FTP e FC di soglia vanno anche su Intervals.icu; ti ricorda di aggiornare MyWhoosh e Garmin Connect) oppure tenere l'FTP attuale. Se l'attività non si legge, <b>Inserisci risultato</b> funziona anche a mano, coi valori del Lap del Fenix. Se cambi l'FTP direttamente su Intervals, SMG lo prende come nuovo test.</li>
     <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Tempi da concordare con chi ti segue.</li>
     <li><b>La tua settimana</b>: giorni attivi, giorni lunghi, durata massima e ora in cui esci di solito (serve per buio e meteo).</li>
     <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Apri <b>Esercizi</b>: sotto ogni esercizio c'è una riga su come si fa. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>
@@ -1404,26 +1411,153 @@ function openTacxSheet() {
       const del = document.getElementById('cDel'); if (del) del.onclick = () => { delete P.tacx; save(); closeSheet(); render(); };
     });
 }
-// risultato del test FTP: potenza media e FC media dei 20 minuti (dal Lap del Fenix, cioè dagli Stages)
+/* ---------- Test FTP: istruzioni, lettura automatica da Intervals, risultato ---------- */
+// FTP che ti aspetti per il test (serve per il ritmo e per l'FTP da mettere su MyWhoosh nel riscaldamento)
+function testGuess() { const P = S.profile; return P.testGuess >= 100 && P.testGuess <= 500 ? P.testGuess : P.ftp; }
+function testPace(G) {
+  const T = G / 0.95, r = x => Math.round(T * x);
+  return { T: Math.round(T), a: [r(0.97), r(0.99)], b: [r(0.99), r(1.01)], c: [r(1.01), r(1.04)] };
+}
+function testPaceHTML(G) {
+  const k = testPace(G);
+  return '<div class="tiles at" style="margin:8px 0"><div class="tile"><b class="num">' + k.a[0] + '–' + k.a[1] + '</b><small>W · minuti 0–5</small></div>' +
+    '<div class="tile"><b class="num">' + k.b[0] + '–' + k.b[1] + '</b><small>W · minuti 5–15</small></div>' +
+    '<div class="tile"><b class="num">' + k.c[0] + '+</b><small>W · minuti 15–20</small></div></div>' +
+    '<p class="mut" style="font-size:13px;margin:0 2px">Media obiettivo ' + k.T + ' W = FTP ' + G + ' W. I primi 5 minuti devono sembrarti quasi facili: l\'errore classico è partire forte e crollare al minuto 12. Negli ultimi 2 minuti vai a tutta.</p>';
+}
+function testHowHTML(sport, G) {
+  const mw = mwFtp(G), li = a => '<ol style="padding-left:20px;margin:6px 0 12px">' + a.map(x => '<li style="margin-bottom:6px">' + x + '</li>').join('') + '</ol>';
+  const ask = '<div class="set"><div class="l"><b>FTP che ti aspetti oggi</b><small>Stima tua: serve solo per il ritmo e per il riscaldamento</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="hG" value="' + G + '"><span>W</span></div></div></div></div>';
+  const before = li(['Nelle 48 ore prima niente sedute dure; la sera prima cena con carboidrati e sonno regolare.',
+    'Al mattino fai il check-in: il test si fa solo col <b>semaforo verde</b>. Se esce arancione o rosso SMG non lo propone, e va bene così: un test fatto stanco ti dà zone troppo basse.',
+    '2–3 ore prima un pasto leggero; il caffè se lo prendi di solito.']);
+  const after = li(['Defaticamento facile, poi <b>salva</b> l\'attività' + (sport === 'indoor' ? ' su <b>tutti e due</b>, Fenix e MyWhoosh' : '') + '. Nell\'autovalutazione del Fenix segna lo sforzo.',
+    'Apri SMG: quando l\'attività del Fenix arriva su Intervals (di solito pochi minuti) SMG trova da sola i 20 minuti migliori, ti mostra potenza e FC medie e ti <b>chiede se aggiornare l\'FTP</b>. Confrontale col Lap del test sul Fenix.',
+    'Se confermi: FTP e FC di soglia aggiornate su SMG e Intervals. Poi a mano, come ti ricorda la schermata: FTP su <b>MyWhoosh</b> (corretta per Tacx/Stages) e su <b>Garmin Connect</b>.',
+    'Se l\'attività non arriva o non si legge, tocca <b>Inserisci il risultato</b> e scrivi i valori del Lap.']);
+  if (sport !== 'indoor') return '<div class="guide"><h2>Test FTP su strada</h2>' + ask +
+    '<h3>Prima</h3>' + before +
+    '<h3>Preparazione</h3>' + li(['Bici da strada con gli <b>Stages</b>. Scegli una salita lunga e regolare o un rettilineo di almeno 8 km senza incroci né semafori.',
+      'Azzera gli Stages dal Fenix (Calibra, pedivella ferma in verticale).',
+      'Schermata dati: potenza 3", potenza media del Lap, tempo del Lap, FC.']) +
+    '<h3>La seduta</h3>' + li(['Riscaldamento progressivo, 3 allunghi da 1 minuto e 5 minuti facili, arrivando all\'inizio del tratto.',
+      'Premi <b>Lap</b> quando parti per i 20 minuti e di nuovo alla fine (se hai avviato la seduta SMG sul Fenix il Lap è automatico).',
+      'Pedala sempre, anche in discesa: le pause con pedivelle ferme contano come zeri nella media.']) +
+    '<h3>Il ritmo nei 20 minuti</h3><div id="hPace">' + testPaceHTML(G) + '</div>' +
+    '<h3>Dopo</h3>' + after + '<button class="btn hot full" id="hOk">Ho capito</button></div>';
+  return '<div class="guide"><h2>Test FTP sui rulli</h2>' + ask +
+    '<p class="intro"><b>Fenix e MyWhoosh lavorano insieme per tutta la seduta</b>, ognuno col suo compito. MyWhoosh comanda il Tacx: lo frena in ERG nel riscaldamento e gli toglie l\'ERG nei 20 minuti. Il Fenix registra gli Stages: <b>il risultato del test sono i suoi watt</b>, non quelli di MyWhoosh (il Tacx legge diverso).</p>' +
+    '<h3>Prima</h3>' + before +
+    '<h3>Preparazione (10 minuti)</h3>' + li(['Ventilatore al massimo, borraccia e asciugamano: al caldo perdi 10–15 W.',
+      '<b>MyWhoosh</b>: nel profilo metti FTP <b><span id="hMw">' + mw + '</span> W</b>' + (tacxRatio() && Math.abs(tacxRatio() - 1) > 0.03 ? ' (la tua stima corretta per la differenza Tacx/Stages)' : '') + '. Serve solo perché il riscaldamento in ERG abbia i watt giusti; il risultato non dipende da questo.',
+      '<b>MyWhoosh</b>: apri la seduta <b>SMG · Test FTP 20 minuti</b> e scegli un <b>percorso piatto</b>. Quando l\'ERG si spegne la resistenza segue la pendenza virtuale: in salita o in discesa i watt ballerebbero.',
+      '<b>Fenix</b>: attività Bici indoor, apri la seduta di oggi <b>SMG · Test FTP 20 minuti</b>. Avvisi di obiettivo spenti. Il Tacx sul Fenix non va abbinato come rullo né come potenza.',
+      '<b>Fenix</b>: azzera gli Stages (Calibra, pedivella ferma in verticale).',
+      '<b>Fenix</b>: una schermata con potenza 3", potenza media del Lap, tempo del Lap e FC. La potenza istantanea oscilla troppo per regolarsi.']) +
+    '<h3>Partenza</h3>' + li(['Avvia la seduta su <b>MyWhoosh e sul Fenix nello stesso momento</b>. Qualche secondo di differenza non conta: i passi del Fenix avanzano da soli e restano allineati a quelli di MyWhoosh.']) +
+    '<h3>Riscaldamento, allunghi, recupero (ERG acceso)</h3>' + li(['MyWhoosh regola la resistenza, tu pedali e basta.',
+      'Nei 5 minuti facili prima del test metti un rapporto con cui pensi di stare a circa <span id="hT">' + testPace(G).T + '</span> W intorno ai 90 rpm (con la catena sulla corona grande, pignone medio).']) +
+    '<h3>I 20 minuti (ERG spento)</h3>' + li(['Al blocco <b>Test</b> MyWhoosh toglie l\'ERG da solo. Se vedi ancora un obiettivo di watt e la resistenza si regola da sola, spegni l\'ERG tu dal comando di MyWhoosh. Da qui lo sforzo lo decidi tu, con i rapporti.',
+      'Sul <b>Fenix</b> parte da solo un nuovo passo (cioè un nuovo Lap). Guarda solo la potenza media del Lap e la potenza 3" del Fenix. <b>Ignora i watt di MyWhoosh.</b>',
+      'Cadenza 85–95, resta seduto, non smettere mai di pedalare: gli zeri contano nella media.',
+      'A metà: se la media del Lap è sopra il previsto e stai bene, tienila; se ti sembra troppo, cala di 5 W subito. Un taglio piccolo e presto costa meno di un crollo.']) +
+    '<h3>Il ritmo nei 20 minuti</h3><div id="hPace">' + testPaceHTML(G) + '</div>' +
+    '<h3>Dopo</h3>' + after +
+    '<p class="mut" style="font-size:13px">Usa sempre questo test, non quelli di Garmin o MyWhoosh: hanno protocolli diversi e i risultati non si confrontano.</p><button class="btn hot full" id="hOk">Ho capito</button></div>';
+}
+function openTestHowSheet(p) {
+  const sport = p && p.sport === 'road' ? 'road' : 'indoor';
+  openSheet(testHowHTML(sport, testGuess()), () => {
+    const $g = document.getElementById('hG');
+    $g.oninput = () => { const v = +$g.value; if (v >= 100 && v <= 500) { S.profile.testGuess = v; save(); document.getElementById('hPace').innerHTML = testPaceHTML(v); const m = document.getElementById('hMw'), t = document.getElementById('hT'); if (m) m.textContent = mwFtp(v); if (t) t.textContent = testPace(v).T; } };
+    $g.onchange = () => { render(); };
+    document.getElementById('hOk').onclick = () => closeSheet();
+  });
+}
+// i 20 minuti con la potenza media più alta (zeri compresi), e la FC media nello stesso tratto
+function best20(st) {
+  const g = t => { const x = (st || []).find(y => y.type === t); return x && x.data; };
+  const w = g('watts'), hr = g('heartrate'), tm = g('time');
+  if (!w || w.length < 1100) return null;
+  const T = tm && tm.length === w.length ? tm : w.map((_, i) => i);
+  let best = null, j = 0, sum = 0;
+  for (let i = 0; i < w.length; i++) {
+    while (j < w.length && T[j] - T[i] < 1200) { sum += +w[j] || 0; j++; }
+    if (T[j - 1] - T[i] >= 1190) { const avg = sum / (j - i); if (!best || avg > best.avg) best = { avg, i, j }; }
+    sum -= +w[i] || 0;
+  }
+  if (!best) return null;
+  let hs = 0, hn = 0;
+  if (hr) for (let k = best.i; k < best.j; k++) if (hr[k] > 40) { hs += hr[k]; hn++; }
+  return { w: Math.round(best.avg), hr: hn > (best.j - best.i) / 2 ? Math.round(hs / hn) : 0, from: Math.round(T[best.i] / 60) };
+}
+async function readTestFromIcu(d) {
+  const p = S.plans[d]; if (!p || !icuOn()) return null;
+  const tried = p.testTried || (p.testTried = []);
+  const acts = (S.activities[d] || []).filter(a => a.id && a.watts && a.min >= 25 && a.sport !== 'strength' && !tried.includes(a.id)).sort((a, b) => b.min - a.min);
+  for (const a of acts) {
+    let st = null;
+    try { st = await icuAct(encodeURIComponent(a.id) + '/streams.json?types=watts,heartrate,time'); } catch (e) { if (!e.status || e.status >= 500) return null; }
+    tried.push(a.id);
+    const r = st && best20(st);
+    if (r && r.w >= 100) return Object.assign(r, { act: a.id });
+  }
+  return null;
+}
+// dopo ogni sincronizzazione: se c'è un test fatto negli ultimi 3 giorni senza risultato, lo legge da Intervals e chiede conferma
+async function testAutoCheck() {
+  if (!icuOn() || busy.testAuto) return;
+  const d = Object.keys(S.plans).filter(k => k <= today() && k >= E.addDays(today(), -3) && S.plans[k].tid === 'ftp_test' && S.plans[k].status === 'done' && !S.plans[k].testRes).sort().pop();
+  if (!d) return;
+  const p = S.plans[d];
+  if (p.testAuto) { if (!p.testAsked && !sheetOpen() && view === 'oggi' && !editCI) { p.testAsked = true; save(); openTestSheet(d); } return; }
+  busy.testAuto = true;
+  try {
+    const r = await readTestFromIcu(d); save();
+    if (r) { p.testAuto = r; p.testAsked = !sheetOpen() && view === 'oggi' && !editCI; save(); render(); if (p.testAsked) openTestSheet(d); }
+  } catch (e) {}
+  busy.testAuto = false;
+}
+// risultato del test FTP: potenza media e FC media dei 20 minuti (dal Fenix, cioè dagli Stages), letti da Intervals o inseriti a mano
 function openTestSheet(d) {
-  const P = S.profile; const p = S.plans[d];
-  openSheet('<div class="guide"><h2>Risultato del test</h2><p class="intro">Leggi sul Fenix il Lap dei 20 minuti: potenza media (dagli Stages) e FC media.</p>' +
-    '<div class="set"><div class="l"><b>Potenza media 20\'</b></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tW" placeholder="' + Math.round(P.ftp / 0.95) + '"><span>W</span></div></div></div></div>' +
-    '<div class="set"><div class="l"><b>FC media 20\'</b><small>Facoltativa: diventa la FC di soglia</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tH" placeholder="' + P.lthr + '"><span>bpm</span></div></div></div></div>' +
+  const P = S.profile; const p = S.plans[d]; const au = p && p.testAuto;
+  const intro = au ? 'Ho letto il test dall\'attività del Fenix su Intervals: i 20 minuti migliori partono al minuto ' + au.from + '. Controlla che corrispondano al Lap del test sul Fenix (puoi correggere i valori), poi decidi.'
+    : 'Leggi sul Fenix il Lap dei 20 minuti: potenza media (dagli Stages) e FC media.' + (icuOn() && p ? ' <span id="tLoad">' + ico('sync', 'spin') + ' Provo a leggerli da Intervals…</span>' : '');
+  openSheet('<div class="guide"><h2>Risultato del test</h2><p class="intro">' + intro + '</p>' +
+    '<div class="set"><div class="l"><b>Potenza media 20\'</b></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tW" placeholder="' + Math.round(testGuess() / 0.95) + '"' + (au ? ' value="' + au.w + '"' : '') + '><span>W</span></div></div></div></div>' +
+    '<div class="set"><div class="l"><b>FC media 20\'</b><small>Facoltativa: diventa la FC di soglia</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tH" placeholder="' + P.lthr + '"' + (au && au.hr ? ' value="' + au.hr + '"' : '') + '><span>bpm</span></div></div></div></div>' +
     '<details class="steps"' + (P.tacx ? '' : ' open') + '><summary>Confronto Tacx / Stages (facoltativo) ' + ico('chev') + '</summary><div class="mut" style="font-size:13px;margin:4px 2px 6px">Watt medi dell\'intera seduta di oggi su MyWhoosh e sul Fenix: serve a calcolare l\'FTP da impostare su MyWhoosh.' + (P.tacx ? ' Ultimo confronto: ' + longDate(P.tacx.date) + '.' : '') + '</div>' + tacxFields(P.tacx && P.tacx.t, P.tacx && P.tacx.s) + '</details>' +
     '<div id="tOut" class="t2" style="margin:12px 2px;font-size:14.5px">FTP = 95% della potenza media.</div>' +
-    '<button class="btn hot full" id="tSave" disabled>Salva' + (icuOn() ? ' e aggiorna Intervals.icu' : '') + '</button></div>', () => {
-      const $w = document.getElementById('tW'), $h = document.getElementById('tH'), out = document.getElementById('tOut'), btn = document.getElementById('tSave');
+    '<button class="btn hot full" id="tSave" disabled>Sì, aggiorna l\'FTP</button>' +
+    '<button class="btn full" id="tNo" style="margin-top:8px" disabled>No, tieni FTP ' + P.ftp + ' W</button></div>', () => {
+      const $w = document.getElementById('tW'), $h = document.getElementById('tH'), out = document.getElementById('tOut'), btn = document.getElementById('tSave'), no = document.getElementById('tNo');
       const val = () => { const w = +$w.value, hr = +$h.value; return { w: w >= 100 && w <= 700 ? w : 0, hr: hr >= 100 && hr <= 210 ? Math.round(hr) : 0 }; };
-      const upd = () => { const v = val(); btn.disabled = !v.w;
-        if (!v.w) { out.textContent = 'FTP = 95% della potenza media.'; return; }
+      const upd = () => { const v = val(); btn.disabled = !v.w; no.disabled = !v.w;
+        if (!v.w) { out.textContent = 'FTP = 95% della potenza media.'; btn.textContent = 'Sì, aggiorna l\'FTP'; return; }
         const f = Math.round(v.w * 0.95), diff = f - P.ftp;
-        out.innerHTML = 'Nuova FTP: <b style="color:var(--hot2)">' + f + ' W</b> (' + (diff >= 0 ? '+' : '') + diff + ' W, ' + (f / P.weight).toFixed(2).replace('.', ',') + ' W/kg)' + (v.hr ? '<br>FC di soglia: <b>' + v.hr + ' bpm</b> (prima ' + P.lthr + ')' : ''); };
-      $w.oninput = upd; $h.oninput = upd;
+        btn.textContent = 'Sì, aggiorna a ' + f + ' W' + (icuOn() ? ' (anche su Intervals)' : '');
+        out.innerHTML = 'Nuova FTP: <b style="color:var(--hot2)">' + f + ' W</b> (' + (diff >= 0 ? '+' : '') + diff + ' W rispetto a ' + P.ftp + ', ' + (f / P.weight).toFixed(2).replace('.', ',') + ' W/kg)' + (v.hr ? '<br>FC di soglia: <b>' + v.hr + ' bpm</b> (prima ' + P.lthr + ')' : '') +
+          '<br><b>Aggiorno l\'FTP?</b>'; };
+      $w.oninput = upd; $h.oninput = upd; upd();
+      if (!au && icuOn() && p) readTestFromIcu(d).then(r => {
+        save(); const ld = document.getElementById('tLoad'); if (!ld) return;
+        if (r) { p.testAuto = r; p.testAsked = true; save();
+          if (!$w.value) $w.value = r.w; if (!$h.value && r.hr) $h.value = r.hr; upd();
+          ld.innerHTML = '<br>Letti da Intervals: i 20 minuti migliori partono al minuto ' + r.from + '. Controlla col Lap del Fenix.'; }
+        else ld.textContent = '(Su Intervals non trovo ancora l\'attività con la potenza: inseriscili a mano o riprova tra qualche minuto.)';
+      }).catch(() => { const ld = document.getElementById('tLoad'); if (ld) ld.textContent = ''; });
+      no.onclick = () => {
+        const v = val(); if (!v.w) return;
+        const tc = readTacx(); if (tc) P.tacx = tc;
+        P.lastTest = d; P.testSoon = false; delete P.testGuess;
+        if (p) p.testRes = { w: v.w, ftp: P.ftp, lthr: null, kept: true };
+        save(); closeSheet(); render();
+        toast('FTP lasciata a ' + P.ftp + ' W. Per rifare il test: Profilo → Test FTP → Anticipa');
+      };
       btn.onclick = async () => {
         const v = val(); if (!v.w) return;
         const ftp = Math.round(v.w * 0.95);
-        btn.disabled = true; btn.textContent = 'Salvo…';
+        btn.disabled = true; no.disabled = true; btn.textContent = 'Salvo…';
         let icuOk = null;
         if (icuOn()) {
           try {
@@ -1434,7 +1568,7 @@ function openTestSheet(d) {
           } catch (e) { icuOk = false; }
         }
         const tc = readTacx(); if (tc) P.tacx = tc;
-        P.ftp = ftp; if (v.hr) P.lthr = v.hr; P.lastTest = d; P.testSoon = false;
+        P.ftp = ftp; if (v.hr) P.lthr = v.hr; P.lastTest = d; P.testSoon = false; delete P.testGuess;
         if (p) p.testRes = { w: v.w, ftp, lthr: v.hr || null };
         save();
         const next = '<ul style="margin:6px 0 0;padding-left:18px">' + (icuOk === false ? '<li><b>Intervals.icu</b>: aggiornamento non riuscito, cambiala a mano in Impostazioni → Ciclismo (altrimenti al prossimo sync torna il valore vecchio).</li>' : '') +

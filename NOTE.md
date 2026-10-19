@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 13 ottobre 2026 · versione app **1.7** · cache service worker `smg-org-v44`
+Aggiornate al 19 ottobre 2026 · versione app **1.8** · cache service worker `smg-org-v45`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -37,7 +37,8 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
   - Proposto nella prima settimana dopo lo scarico se sono passate almeno 6 settimane; oltre 9 settimane anche in altre settimane, mai durante lo scarico.
   - Solo con semaforo verde, di lunedì, mercoledì o sabato. "Anticipa" lo chiede al primo giorno utile.
   - I 20' sono inviati come `freeride` (ERG spento).
-  - Nella schermata del risultato: FTP = 95% della media, FC media = FC di soglia, valori scritti su Intervals (PUT `/sport-settings/{id}`).
+  - **Istruzioni passo passo** (dalla v1.8): nel giorno del test, sotto la seduta, c'è il riquadro "Oggi c'è il test FTP" con la media obiettivo e il pulsante che apre la procedura completa (rulli o strada). Contiene: prima, preparazione, partenza, riscaldamento in ERG, i 20' senza ERG, ritmo per minuti 0–5, 5–15 e 15–20, dopo. Il campo "FTP che ti aspetti oggi" (`profile.testGuess`, cancellato dopo il test) ricalcola il ritmo, l'FTP da mettere su MyWhoosh per il riscaldamento e i watt del rapporto.
+  - **Lettura automatica** (dalla v1.8): dopo ogni sincronizzazione, se c'è un test fatto negli ultimi 3 giorni senza risultato, SMG legge da Intervals gli stream (`watts`, `heartrate`, `time`) dell'attività con la potenza, trova i 20' con la media più alta (zeri compresi) e la FC media nello stesso tratto, e apre la scheda "Risultato del test" già compilata. Chiede sempre conferma: **"Sì, aggiorna a N W"** (FTP = 95%, FC di soglia, PUT `/sport-settings/{id}` su Intervals) oppure **"No, tieni FTP …"** (registra il test con `kept: true`, aggiorna `lastTest`, l'FTP resta). I valori si possono correggere. Se l'attività non si legge (403 da Strava, niente potenza) resta l'inserimento a mano dal Lap del Fenix.
 - **Confronto Tacx/Stages** (Profilo → Tacx e Stages): oltre il 3% di differenza calcola l'FTP da impostare su MyWhoosh (FTP × watt Tacx ÷ watt Stages).
 - **Esercizi extra** (forza e mobilità): ogni esercizio ha una riga che spiega come si fa.
 - **Altro**: giorni speciali (impegno o giorno extra), rifornimento nei lunghi, riepilogo del lunedì, anteprima di domani, grafico della forma, promemoria backup, guida sempre aggiornata, barra "Nuova versione pronta – Aggiorna".
@@ -54,9 +55,9 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 ## 2. Decisioni e vincoli
 
 **Atleta e disponibilità**
-- Il 10 ottobre il Profilo mostrava FTP 245 W (da Intervals) e, per la differenza Tacx/Stages del 9,8%, FTP consigliata su MyWhoosh 221 W. FC di soglia 164, passo di soglia 4:08/km. Peso e altri dati personali arrivano da Intervals.
+- FTP 245 W su Intervals: misurata tempo fa col Fenix. Al 19 ottobre Fabrizio stima di essere circa 20 W sotto (~225 W): il test va rifatto a breve. FC di soglia 164, passo di soglia 4:08/km. Peso e altri dati personali arrivano da Intervals.
 - Lunedì e mercoledì fino a 1h15; venerdì, sabato e domenica giorni lunghi fino a 2h30; martedì e giovedì riposo.
-- Corsa in pausa: quando riprende, rientro graduale con le fasi già previste (cammino e corsa → corsa facile → completa).
+- Corsa in pausa per la fascite (al 19 ottobre non permette ancora il rientro). Quando riprende, rientro graduale con le fasi già previste (cammino e corsa → corsa facile → completa).
 
 **Rulli e potenza**
 - Su MyWhoosh il Tacx Flux 2S è l'unico misuratore e comanda l'ERG. Gli Stages (pedivella sulla bici da strada) restano solo sul Fenix, che registra la stessa seduta.
@@ -64,7 +65,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - Sul Fenix si può avviare anche la seduta SMG, partendo insieme a MyWhoosh e con gli avvisi di obiettivo spenti.
 - MyWhoosh non permette agli Stages di comandare l'ERG come sorgente primaria: non proporlo.
 - Azzerare gli Stages prima di ogni seduta. Media della potenza sul Fenix con gli zeri inclusi.
-- Il 7 ottobre MyWhoosh (Tacx) ha letto il **9,8% in meno** del Fenix (Stages).
+- Il 7 ottobre MyWhoosh (Tacx) ha letto il **9,8% in meno** del Fenix (Stages). Con confronti ripetuti la differenza varia un po' ogni volta; al 19 ottobre si è assestata intorno al **−5,2%**.
 
 **Dati e doppioni**
 - Su Intervals: importazione delle attività di MyWhoosh **disattivata** (permessi MyWhoosh: "Attività – Aggiornare" tolto, Calendario lasciato). Si tiene l'attività del Fenix.
@@ -80,6 +81,15 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - Pubblicare a piccoli passi e verificare il deploy di GitHub Actions. GitHub Pages tiene i file in cache per circa 10 minuti, quindi gli aggiornamenti arrivano con qualche minuto di ritardo. Il 5 ottobre un guasto di GitHub ha bloccato una pubblicazione e l'ho dovuta rilanciare.
 - Prova delle modifiche con Playwright (Chromium già installato) e dati di Intervals e Open-Meteo simulati.
 
+**Procedura del test sui rulli (decisa il 19 ottobre: non richiederla)**
+- Fenix e MyWhoosh **attivi tutti e due per tutta la seduta**, avviati nello stesso momento con la seduta SMG del giorno. MyWhoosh comanda il Tacx (ERG nel riscaldamento, allunghi e defaticamento); il Fenix registra gli Stages, e **il risultato sono i watt del Fenix**, non quelli di MyWhoosh.
+- Su MyWhoosh: percorso **piatto** (senza ERG la resistenza segue la pendenza virtuale) e FTP nel profilo = stima × rapporto Tacx/Stages, solo per avere i watt giusti nel riscaldamento.
+- Al blocco Test (inviato come `freeride`) MyWhoosh toglie l'ERG; se non lo fa, si spegne a mano. Sforzo regolato coi rapporti guardando potenza 3" e potenza media del Lap sul Fenix. Il Lap del Fenix parte da solo col passo.
+- Fenix: avvisi di obiettivo spenti, Stages azzerati, Tacx non abbinato come rullo né come potenza.
+- Ritmo: media obiettivo = FTP stimata ÷ 0,95. Minuti 0–5 al 97–99%, 5–15 al 99–101%, 15–20 dal 101% in su, ultimi 2' a tutta. Cadenza 85–95, mai smettere di pedalare.
+- Giorno migliore: mercoledì (martedì riposo), con lunedì facile. Semaforo verde obbligatorio.
+- Dopo: salvare su Fenix e MyWhoosh; SMG legge il test da Intervals e chiede se aggiornare l'FTP. Poi FTP a mano su MyWhoosh (corretta Tacx/Stages) e su Garmin Connect.
+
 ---
 
 ## 3. Prossimi passi
@@ -88,7 +98,6 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
    - Controllare che la seduta SMG arrivi su MyWhoosh nonostante il permesso "Attività" tolto, e che su Intervals arrivi solo l'attività del Fenix.
    - Controllare se sforzo percepito e sensazione inseriti su Garmin compaiono nell'attività su Intervals (ora si vedono nel dettaglio attività di SMG). Se non compaiono, inserirli su Intervals.
    - Dopo la calibrazione di Stages e Tacx, rifare il confronto (Profilo → Tacx e Stages → Rifai) e impostare su MyWhoosh l'FTP indicata.
-2. **FTP**: chiarire da dove viene il valore di 245 W su Intervals (test, eFTP o inserimento manuale). Se non è stato misurato con gli Stages, anticipare il test (Profilo → Test FTP → Anticipa).
+2. **FTP**: rifare il test a breve (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. Primo test con la lettura automatica: verificare che i 20' trovati coincidano col Lap del Fenix e che MyWhoosh spenga davvero l'ERG al blocco Test.
 3. **26 ottobre: analisi del backup.** Esportare il backup da SMG e caricarlo in chat per tarare semaforo, livelli MTB senza potenza, progressione e frequenza del test.
-4. **Quando riprende la corsa**: impostare la progressione di rientro.
-5. **Idee rimandate** (solo se servono): lettura automatica da Intervals del risultato del test (potenza e FC del giro dei 20').
+4. **Quando riprende la corsa** (ora ferma per la fascite): impostare la progressione di rientro.
