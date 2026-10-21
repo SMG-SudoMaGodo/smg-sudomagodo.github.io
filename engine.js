@@ -180,6 +180,40 @@ const T = [
     desc: 'Corsa lunga e tranquilla, con gli ultimi minuti un filo più decisi se ti senti bene.',
     build(D, s) { return [warmup(s, 10), sec('Lungo', [st('Z2', D - 25, 'Regolare')]), sec('Finale', [st('Z3', 10, 'Un filo più deciso')]), cooldown(s, 5)]; } },
 
+  { id: 'end_prog', name: 'Fondo in crescendo', level: 2, sports: [...BIKE, 'run'], dur: [45, 150], runStage: 2,
+    desc: 'Fondo che cresce piano piano: parti nella parte bassa del fondo e chiudi in quella alta. Insegna a gestire il ritmo e allena la resistenza senza fatica inutile.',
+    build(D, s) {
+      const cd = s === 'run' ? 5 : 8, body = D - 10 - cd;
+      const fin = s === 'run' ? 0 : clamp(Math.round(body * 0.15), 5, 12);
+      const a = Math.round((body - fin) / 2), b = body - fin - a;
+      const main = [st('Z2', a, 'Parte bassa del fondo'), st('Z2', b, 'Parte alta del fondo')];
+      if (fin) main.push(st('Z3', fin, 'Chiudi a ritmo tempo'));
+      return [warmup(s, 10), sec('Crescendo', main), cooldown(s, cd)];
+    } },
+  { id: 'pedal_tech', name: 'Tecnica di pedalata', level: 2, sports: ['indoor'], dur: [45, 70],
+    desc: 'Fondo con esercizi di pedalata: una gamba alla volta (l\'altra appoggiata sul supporto del rullo o sul telaio) e frullini. Pedalata più rotonda vuol dire più watt a parità di fatica.',
+    build(D, s) {
+      const n = clamp(Math.floor((D - 18) / 9), 2, 6);
+      const main = sec('Tecnica', [st('Z1', 0.5, 'Solo gamba sinistra, tira su il pedale', [70, 80]), st('Z1', 0.5, 'Solo gamba destra, tira su il pedale', [70, 80]),
+        st('Z2', 2, 'Due gambe, pedalata rotonda', [85, 95]), st('Z2', 1, 'Frullino, bacino fermo', [105, 115]), st('Z2', 5, 'Fondo', [85, 95])], n);
+      return assemble(D, s, warmup(s, 10), [main], 8);
+    } },
+  { id: 'run_trail', name: 'Corsa nel verde', level: 2, sports: ['run'], dur: [30, 60], runStage: 2,
+    desc: 'Sterrato, parco o sentiero facile: terreno morbido, ritmo da fondo e sguardo in giro. Meno colpi sul piede e testa libera.',
+    build(D, s) { return [warmup(s, 8), sec('Nel verde', [st('Z2', D - 13, 'Terreno morbido, a sensazione')]), cooldown(s, 5)]; } },
+  { id: 'run_cadence', name: 'Passo corto e veloce', level: 2, sports: ['run'], dur: [30, 50], runStage: 2,
+    desc: 'Corsa facile con tratti a cadenza alta (passi corti, 170-180 al minuto): appoggio più leggero sotto il corpo, meno carico su talloni e fascia plantare. Diventa il tuo passo normale.',
+    build(D, s) {
+      const n = clamp(Math.floor((D - 13) / 5), 3, 8);
+      return assemble(D, s, warmup(s, 8), [sec('Cadenza', [st('Z2', 1, 'Passi corti e rapidi'), st('Z2', 4, 'Corsa facile')], n)], 5, 'Corsa facile');
+    } },
+  { id: 'run_drills', name: 'Andature e allunghi', level: 2, sports: ['run'], dur: [40, 60], runStage: 3,
+    desc: 'Corsa facile con andature tecniche (skip, calciata, passo saltellato) e allunghi: corsa più economica ed elastica. Se il piede si fa sentire, salta le andature.',
+    build(D, s) {
+      return assemble(D, s, warmup(s, 12), [sec('Andature', [st('Z2', 0.5, 'Andatura (alterna skip, calciata, saltellato)'), st('Z1', 1, 'Torna camminando')], 6),
+        sec('Allunghi', [st('Z6', 20 / 60, 'Allungo progressivo'), st('Z1', 100 / 60, 'Recupero')], 5)], 5, 'Corsa facile');
+    } },
+
   /* ---------- 3 · medio ---------- */
   { id: 'tempo_blocks', name: 'Tempo a blocchi', level: 3, sports: [...BIKE, 'run'], dur: [50, 120], runStage: 3,
     desc: 'Blocchi a ritmo "tempo": impegnativo ma sostenibile, respiro profondo. Allena la resistenza alla fatica.',
@@ -217,6 +251,49 @@ const T = [
     build(D, s) {
       const fin = D >= 120 ? 30 : 20;
       return [warmup(s, 12), sec('Fondo', [st('Z2', D - 12 - fin - 10, 'Fondo regolare')]), sec('Finale', [st('Z3', fin, 'Tempo, chiudi forte')]), cooldown(s, 10)];
+    } },
+
+  { id: 'sfr', name: 'Forza resistente (SFR)', level: 3, sports: BIKE, dur: [50, 120],
+    desc: 'Blocchi a cadenza bassa (50-60 rpm) e ritmo tempo, seduto col busto fermo: forza specifica per la pedalata, la base dell\'inverno. Fuori si fanno in salita. Se senti le ginocchia, alza a 65-70 rpm.',
+    build(D, s) {
+      const L = D >= 90 ? 8 : 6, n = clamp(Math.floor((D - 25) / (L + 4)), 3, 6);
+      return assemble(D, s, warmup(s, 12), [sec('SFR', [st('Z3', L, s === 'indoor' ? 'Rapporto duro, seduto, busto fermo' : 'In salita, rapporto duro, seduto', [50, 60]), st('Z2', 4, 'Agile per sciogliere', [90, 100])], n)], 8);
+    } },
+  { id: 'ss_surges', name: 'Sweet spot con strappi', level: 3, sports: ['indoor', 'road'], dur: [55, 110],
+    desc: 'Sweet spot interrotto ogni 2 minuti da uno strappo di 15 secondi in piedi: come in gruppo o su uno strappo, rilanci e poi torni subito al ritmo senza mollare.',
+    build(D, s) {
+      const n = clamp(Math.floor((D - 22) / 14), 2, 4), main = [];
+      for (let i = 1; i <= n; i++) {
+        main.push(sec('Blocco ' + ['uno', 'due', 'tre', 'quattro'][i - 1], [st('SS', 1.75, 'Sweet spot', [85, 95]), st('Z6', 0.25, 'Strappo in piedi', [95, 105])], 5));
+        if (i < n) main.push(sec('Recupero', [st('Z1', 4, 'Recupero')]));
+      }
+      return assemble(D, s, warmup(s, 12, true), main, 8);
+    } },
+  { id: 'tempo_cad', name: 'Piramide di cadenza', level: 3, sports: BIKE, dur: [50, 120],
+    desc: 'Blocchi a ritmo tempo in cui la cadenza sale ogni 2 minuti, da 70 a 100 rpm, a parità di sforzo. Allena forza e agilità insieme e ti fa trovare la cadenza più efficiente.',
+    build(D, s) {
+      const n = clamp(Math.floor((D - 22) / 11), 2, 6);
+      return assemble(D, s, warmup(s, 12), [sec('Piramide di cadenza', [st('Z3', 2, 'Cadenza 70', [70, 75]), st('Z3', 2, 'Cadenza 80', [80, 85]),
+        st('Z3', 2, 'Cadenza 90', [90, 95]), st('Z3', 2, 'Cadenza 100', [100, 105]), st('Z2', 3, 'Recupero agile')], n)], 8);
+    } },
+  { id: 'ss_long', name: 'Sweet spot lungo', level: 3, sports: ['indoor', 'road'], dur: [60, 120],
+    desc: 'Due blocchi lunghi appena sotto la soglia: il lavoro che alza di più l\'FTP con una fatica che si recupera in fretta. Cadenza fluida, respiro profondo, testa sul ritmo.',
+    build(D, s) {
+      const L = clamp(Math.floor((D - 27) / 2 / 5) * 5, 15, 30);
+      return assemble(D, s, warmup(s, 12, true), [sec('Sweet spot', [st('SS', L, 'Sweet spot costante', [85, 95]), st('Z1', 5, 'Recupero')], 2)], 8);
+    } },
+  { id: 'progressive', name: 'Progressivo a terzi', level: 3, sports: [...BIKE, 'run'], dur: [45, 120], runStage: 3,
+    desc: 'Un unico blocco che accelera: fondo, poi tempo, poi l\'ultimo terzo in sweet spot. Allena a spingere quando sei già stanco, come nel finale di un giro.',
+    build(D, s) {
+      const cd = s === 'run' ? 5 : 8, body = D - 10 - cd;
+      let c = Math.min(20, Math.round(body * 0.25)); const b = Math.round(body * 0.35), a = body - b - c;
+      return [warmup(s, 10), sec('Progressivo', [st('Z2', a, 'Fondo'), st('Z3', b, 'Tempo'), st('SS', c, 'Ultimo terzo deciso')]), cooldown(s, cd)];
+    } },
+  { id: 'run_cruise', name: 'Ripetute lunghe in sweet spot', level: 3, sports: ['run'], dur: [40, 60], runStage: 3,
+    desc: 'Ripetute da 5 minuti a ritmo sostenuto con un minuto di recupero: tanto tempo vicino alla soglia senza arrivare a fondo. Il passo deve restare uguale dalla prima all\'ultima.',
+    build(D, s) {
+      const n = clamp(Math.floor((D - 18) / 6), 3, 6);
+      return assemble(D, s, warmup(s, 12, true), [sec('Ripetute', [st('SS', 5, 'Ritmo sostenuto e regolare'), st('Z1', 1, 'Recupero trotterellando')], n)], 6, 'Corsa facile');
     } },
 
   /* ---------- 4 · duro ---------- */
@@ -266,6 +343,31 @@ const T = [
       return assemble(D, s, warmup(s, 15, true), [sec('Piramide', steps)], 8);
     } },
 
+  { id: 'thr_surge', name: 'Soglia con partenza forte', level: 4, sports: ['indoor', 'road'], dur: [55, 100],
+    desc: 'Ogni ripetuta parte con un minuto sopra la soglia e poi si assesta alla soglia: impari a smaltire l\'acido di una partenza veloce senza saltare.',
+    build(D, s) {
+      const L = D >= 80 ? 8 : 6, n = clamp(Math.floor((D - 28) / (L + 5)), 3, 4);
+      return assemble(D, s, warmup(s, 15, true), [sec('Soglia', [st('Z5', 1, 'Partenza forte', [95, 105]), st('Z4', L, 'Assestati alla soglia', [85, 95]), st('Z1', 4, 'Recupero')], n)], 8);
+    } },
+  { id: 'thr_2x', name: 'Soglia lunga', level: 4, sports: ['indoor', 'road'], dur: [60, 110],
+    desc: 'Blocchi lunghi alla soglia, il passo successivo alle ripetute brevi: 2×15 o 2×20 minuti (3×15 se hai tempo). Parti regolare, l\'ultimo blocco deve essere uguale al primo.',
+    build(D, s) {
+      const n = D >= 90 ? 3 : 2, L = n === 3 ? 15 : clamp(Math.floor((D - 28) / 2 / 5) * 5, 12, 20);
+      return assemble(D, s, warmup(s, 15, true), [sec('Soglia', [st('Z4', L, 'Soglia costante', [85, 95]), st('Z1', 5, 'Recupero')], n)], 8);
+    } },
+  { id: 'mtb_sector', name: 'Settori a soglia', level: 4, sports: ['mtb'], dur: [60, 120],
+    desc: 'Scegli uno sterrato scorrevole o una strada bianca di 5 minuti e percorrilo a soglia, recuperando pedalando. Allena la soglia con la guida fuoristrada.',
+    build(D, s) {
+      const n = clamp(Math.floor((D - 28) / 9), 3, 6);
+      return assemble(D, s, warmup(s, 15, true), [sec('Settori', [st('Z4', 5, 'Sterrato scorrevole a soglia'), st('Z2', 4, 'Recupera pedalando')], n)], 8);
+    } },
+  { id: 'run_hills', name: 'Salite brevi', level: 4, sports: ['run'], dur: [40, 60], runStage: 3,
+    desc: 'Ripetute in salita da un minuto: spinta forte, busto alto, braccia attive; giù di corsa lenta. Forza e potenza di corsa con meno colpi della pianura. Solo quando il piede è a posto da settimane.',
+    build(D, s) {
+      const n = clamp(Math.floor((D - 20) / 3), 6, 10);
+      return assemble(D, s, warmup(s, 12, true), [sec('Salite', [st('Z5', 1, 'Salita: spinta e braccia'), st('Z1', 2, 'Giù di corsa lenta')], n)], 6, 'Corsa facile');
+    } },
+
   /* ---------- 5 · molto duro ---------- */
   { id: 'vo2_3', name: 'VO2max 3 minuti', level: 5, sports: ['indoor', 'road', 'run'], dur: [50, 90], runStage: 3,
     desc: 'Ripetute da 3 minuti al massimo sostenibile: alzano il motore aerobico. Dure, ma finiscono presto.',
@@ -300,6 +402,29 @@ const T = [
       const n = clamp(Math.floor((D - 25) / 8), 4, 8);
       return assemble(D, s, warmup(s, 12, true), [sec('Caccia', [st('Z5', 2, 'Strappo a tutta'), st('Z2', 6, 'Recupera')], n)], 8);
     } },
+  { id: 'vo2_long', name: 'VO2max lunghi', level: 5, sports: ['indoor', 'road', 'run'], dur: [45, 90], runStage: 3,
+    desc: 'Ripetute da 4-5 minuti al massimo sostenibile: il passo successivo ai 3 minuti, più tempo col motore al massimo. La prima deve sembrarti controllata.',
+    build(D, s) {
+      const L = s === 'run' || D < 75 ? 4 : 5, R = L === 4 ? 3 : 4, n = clamp(Math.floor((D - 28) / (L + R)), 3, 5);
+      return assemble(D, s, warmup(s, s === 'run' ? 12 : 15, true), [sec('VO2max', [st('Z5', L, 'Forte e costante', [95, 105]), st('Z1', R, 'Recupero')], n)], s === 'run' ? 6 : 8);
+    } },
+  { id: 'micro1515', name: '15/15', level: 5, sports: ['indoor', 'road'], dur: [45, 90],
+    desc: 'Quindici secondi forte e quindici facili, venti volte di fila: il cuore resta al massimo ma le gambe non si bruciano. Se l\'ERG non fa in tempo, fai le serie a rapporti con l\'ERG spento.',
+    build(D, s) {
+      const sets = clamp(Math.floor((D - 23) / 15), 2, 3), main = [];
+      for (let i = 1; i <= sets; i++) {
+        main.push(sec('Serie ' + ['uno', 'due', 'tre'][i - 1], [st('Z6', 0.25, 'Forte', [100, 110]), st('Z1', 0.25, 'Facile')], 20));
+        if (i < sets) main.push(sec('Recupero', [st('Z1', 5, 'Recupero')]));
+      }
+      return assemble(D, s, warmup(s, 15, true), main, 8);
+    } },
+  { id: 'climb_reps', name: 'Ripetute in salita', level: 5, sports: ['mtb', 'road'], dur: [60, 120],
+    desc: 'Una salita di 2-3 minuti, sempre la stessa, ripetuta al massimo sostenibile; giù piano per recuperare. Confronta i tempi col Lap: l\'ultima deve valere la prima.',
+    build(D, s) {
+      const n = clamp(Math.floor((D - 27) / 7), 5, 8);
+      return assemble(D, s, warmup(s, 15, true), [sec('Ripetute', [st('Z5', 2.5, 'Salita forte e costante', [70, 85]), st('Z1', 4.5, 'Discesa e recupero')], n)], 8);
+    } },
+
   { id: 'ftp_test', name: 'Test FTP 20 minuti', level: 5, sports: ['indoor', 'road'], dur: [60, 75], test: true,
     desc: 'Il test per aggiornare le zone: 20 minuti al massimo costante, misurati con gli Stages. FTP = 95% della potenza media dei 20 minuti. Parti prudente e chiudi forte.',
     setup: {
@@ -318,6 +443,32 @@ const T = [
         cooldown(s, Math.max(10, D - wu - 34))];
     } }
 ];
+
+// cosa allena ogni seduta: serve per variare gli stimoli (e, più avanti, per dare un tema ai blocchi)
+const FOCUS = {
+  rec_spin: 'rec', rec_run: 'rec', run_walk: 'rec',
+  end_steady: 'fondo', explorer: 'fondo', hilly_long: 'fondo', free_ride: 'fondo', long_run: 'fondo', end_prog: 'fondo', run_trail: 'fondo',
+  end_cad: 'tecnica', pedal_tech: 'tecnica', run_cadence: 'tecnica', run_drills: 'tecnica', end_strides: 'brio',
+  tempo_blocks: 'tempo', tempo_climbs: 'tempo', fartlek: 'tempo', long_finish: 'tempo', tempo_cad: 'tempo', progressive: 'tempo',
+  sweetspot: 'ss', ss_surges: 'ss', ss_long: 'ss', run_cruise: 'ss', sfr: 'forza',
+  threshold: 'soglia', over_under: 'soglia', thr_climbs: 'soglia', pyramid: 'soglia', thr_surge: 'soglia', thr_2x: 'soglia', mtb_sector: 'soglia',
+  sprints: 'sprint', run_hills: 'forza',
+  vo2_3: 'vo2', v3030: 'vo2', v4020: 'vo2', hill_hunt: 'vo2', vo2_long: 'vo2', micro1515: 'vo2', climb_reps: 'vo2', ftp_test: 'test'
+};
+const FOCUS_INFO = {
+  rec: ['Recupero', 'Fa circolare il sangue e scioglie le gambe: domani stai meglio.'],
+  fondo: ['Fondo aerobico', 'Costruisce il motore di base: più resistenza e grassi usati meglio.'],
+  tecnica: ['Tecnica', 'Pedalata o corsa più efficiente: stessi watt con meno fatica.'],
+  brio: ['Brillantezza', 'Tiene sveglie le fibre veloci senza stancarti.'],
+  tempo: ['Tempo', 'Resistenza alla fatica: ritmi medi tenuti a lungo.'],
+  ss: ['Sweet spot', 'Il lavoro più redditizio per alzare l\'FTP con fatica gestibile.'],
+  forza: ['Forza specifica', 'Più forza in ogni pedalata (o falcata): la base per salire meglio.'],
+  soglia: ['Soglia', 'Alza l\'FTP: andare più forte più a lungo.'],
+  vo2: ['VO2max', 'Alza il tetto del motore: più margine sopra la soglia.'],
+  sprint: ['Sprint', 'Esplosività e brillantezza.'],
+  test: ['Test', 'Misura l\'FTP e aggiorna le zone.']
+};
+T.forEach(t => { t.focus = FOCUS[t.id] || 'fondo'; });
 
 const TEMPLATES = Object.fromEntries(T.map(t => [t.id, t]));
 
@@ -842,7 +993,7 @@ function propose(state, date, opts) {
   if (fb.tired) dur = round5(Math.max(tpl.dur[0], dur * 0.9));
   if (ci.ill === 'neck') dur = round5(Math.max(tpl.dur[0], dur * 0.8));
   if (deload) dur = round5(Math.max(tpl.dur[0], dur * 0.75));
-  if (opts.forceTid && tpl.id === opts.forceTid) reasons.push('Versione rulli della seduta di oggi');
+  if (opts.forceTid && tpl.id === opts.forceTid) reasons.push(opts.picked ? 'Scelta da te tra le alternative' : 'Versione rulli della seduta di oggi');
   if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.min(Math.max(opts.forceDur, 30), P.indoorMax || 70) : opts.forceDur));
 
   /* --- motivi e sfida --- */
@@ -871,14 +1022,66 @@ function propose(state, date, opts) {
   let extra = null;
   if (P.sports.strength && level <= 2 && !dayLong) extra = EXTRAS[Math.floor(r() * EXTRAS.length)].id;
 
-  return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload, step, at: hhmm(at), dark, dusk: !!sun && !dark && at + dur > sun.set + 10 };
+  const sportW = Object.fromEntries(cand.map(x => [x, sportWeight(x)]));
+  return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload, step, at: hhmm(at), dark, dusk: !!sun && !dark && at + dur > sun.set + 10, sportW };
+}
+
+/**
+ * Alternative alla seduta del giorno: fino a 3 sedute dello stesso livello (stesso stimolo, stesse regole di recupero),
+ * con sport sensati per meteo e luce, preferendo cose che non fai da un po' e stimoli diversi tra loro.
+ * seed cambia il gruppo proposto ("altre 3").
+ */
+function alternatives(state, date, plan, opts, seed) {
+  opts = Object.assign({}, opts || {}); delete opts.forceTid; delete opts.picked; opts.reroll = 0;
+  const P = state.profile, cfg = dayCfg(state, date);
+  const dayLong = !!cfg.long && !opts.extra;
+  const ref = propose(state, date, opts);
+  if (!plan || plan.rest || ref.rest) return [];
+  const W = ref.sportW || {}; const maxW = Math.max(0.0001, ...Object.values(W));
+  const sports = opts.forceSport ? [opts.forceSport] : Object.keys(W).filter(x => W[x] >= maxW * 0.12 || x === plan.sport);
+  const ctx = context(state, date, opts.assumeDone);
+  const r = rng(hash(date + '|alt|' + (seed || 0)));
+  const shown = [];
+  const collect = lv => {
+    const c = [];
+    sports.forEach(sp => T.forEach(t => {
+      if (t.level !== lv || t.test || t.id === plan.tid || !templateOk(t, sp, P, dayLong)) return;
+      if (t.dur[0] > (opts.forceDur || plan.dur + 10)) return;
+      const last = ctx.lastUse[t.id];
+      let w = (W[sp] || 0.05) / maxW * (last == null ? 1.3 : last <= 3 ? 0.08 : last <= 7 ? 0.3 : last <= 14 ? 0.7 : 1);
+      if (sp === plan.sport) w *= 1.4;
+      c.push({ t, sp, w, lv });
+    }));
+    return c;
+  };
+  const out = [];
+  const take = (pool, n) => {
+    while (out.length < n && pool.length) {
+      const pick = pickWeighted(r, pool.map(x => [x, x.w]));
+      out.push(pick);
+      pool = pool.filter(x => x.t.id !== pick.t.id).map(x => Object.assign({}, x, { w: x.w * (x.t.focus === pick.t.focus ? 0.3 : 1) * (x.sp === pick.sp ? 0.7 : 1) }));
+    }
+  };
+  // "altre 3": i gruppi già visti pesano poco, così escono prima le sedute non ancora mostrate
+  const seen = [];
+  for (let k = 0; k <= (seed || 0); k++) {
+    out.length = 0;
+    take(collect(plan.level).map(x => seen.includes(x.t.id) ? Object.assign({}, x, { w: x.w * 0.02 }) : x), 3);
+    out.forEach(x => seen.push(x.t.id));
+  }
+  if (out.length < 3 && plan.level >= 2) take(collect(plan.level - 1), 3);
+  return out.map(x => {
+    const np = propose(state, date, Object.assign({}, opts, { forceSport: x.sp, forceTid: x.t.id, picked: true, forceDur: opts.forceDur || plan.dur }));
+    np.easier = x.lv < plan.level;
+    return np;
+  }).filter(x => !x.rest && x.tid);
 }
 
 /* ------------------------------------------------------------------ */
 /* Versione rulli di una seduta all'aperto                             */
 /* ------------------------------------------------------------------ */
 const INDOOR_EQ = { explorer: 'end_steady', hilly_long: 'end_steady', free_ride: 'end_cad', tempo_climbs: 'tempo_blocks',
-  fartlek: 'tempo_blocks', thr_climbs: 'threshold', hill_hunt: 'vo2_3' };
+  fartlek: 'tempo_blocks', thr_climbs: 'threshold', hill_hunt: 'vo2_3', mtb_sector: 'thr_2x', climb_reps: 'vo2_long' };
 function indoorVersion(plan, profile) {
   const t = TEMPLATES[plan.tid];
   const tid = t.sports.includes('indoor') ? t.id : INDOOR_EQ[t.id] || null;
@@ -1019,7 +1222,7 @@ function activityLevel(a, P) {
 root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
-  defaultProfile, readiness, propose, indoorVersion, build, stats, profileBars, targetText,
+  defaultProfile, readiness, propose, alternatives, FOCUS_INFO, indoorVersion, build, stats, profileBars, targetText,
   toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
 };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.8';
+const APP_V = '1.9';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -355,6 +355,35 @@ function stepsHTML(sections, sport) {
   return h;
 }
 
+function focusHTML(t) {
+  const f = E.FOCUS_INFO[t.focus]; if (!f || t.focus === 'test') return '';
+  return '<div class="focus"><span class="tag">' + esc(f[0]) + '</span><span>' + esc(f[1]) + '</span></div>';
+}
+// "Alternative": 3 sedute dello stesso livello tra cui scegliere
+function openAltSheet(d, seed) {
+  const p = S.plans[d]; if (!p) return;
+  const alts = E.alternatives(S, d, p, Object.assign({}, p.opts, { weather: wxFor(d) }), seed);
+  const cur = E.TEMPLATES[p.tid];
+  const card = (a, i) => {
+    const t = E.TEMPLATES[a.tid], secs = E.build(a, S.profile), stt = E.stats(secs, a.sport, S.profile), f = E.FOCUS_INFO[t.focus] || ['', ''];
+    return '<div class="alt"><div class="meta">' + sportIcon(a.sport) + '<div><b>' + esc(t.name) + '</b><small>' + E.SPORTS[a.sport].name + ' · ' + fmtMin(stt.min) + ' · carico ' + stt.tss + (a.easier ? ' · un gradino più facile' : '') + '</small></div></div>' +
+      chartSVG(secs) + '<div class="focus"><span class="tag">' + esc(f[0]) + '</span><span>' + esc(f[1]) + '</span></div>' +
+      '<p class="mut" style="font-size:13px;margin:6px 2px 8px">' + esc(t.desc) + '</p><button class="btn hot sm full" data-alt="' + i + '">' + ico('check') + 'Scelgo questa</button></div>';
+  };
+  openSheet('<div class="guide"><h2>Alternative</h2><p class="intro">Stesso livello di oggi (' + E.LEVELS[p.level].toLowerCase() + '), quindi stesso stimolo e stesse regole di recupero, ma un allenamento diverso. Prima quelle che non fai da un po\'. Ora hai: <b>' + esc(cur.name) + '</b>.</p>' +
+    (alts.length ? alts.map(card).join('') : '<p class="intro">Oggi non ci sono alternative a questo livello con gli sport attivi.</p>') +
+    '<div class="row" style="margin-top:10px"><button class="btn" id="altMore">' + ico('dice') + 'Altre 3</button><button class="btn" id="altKeep">Tengo la mia</button></div></div>', () => {
+      document.querySelectorAll('[data-alt]').forEach(b => b.onclick = () => {
+        const a = alts[+b.dataset.alt];
+        closeSheet();
+        setOpts(o => { o.forceSport = a.sport; o.forceTid = a.tid; o.picked = true; o.exclude = []; });
+        toast(E.TEMPLATES[a.tid].name + ': è la seduta di oggi');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      document.getElementById('altMore').onclick = () => { $('#sheetBody').scrollTop = 0; closeSheet(); setTimeout(() => openAltSheet(d, (seed || 0) + 1), 60); };
+      document.getElementById('altKeep').onclick = () => closeSheet();
+    });
+}
 function workoutHTML(p, ro) {
   const t = E.TEMPLATES[p.tid]; const sections = E.build(p, S.profile); const st = E.stats(sections, p.sport, S.profile);
   const sp = E.SPORTS[p.sport]; const col = SC[p.sport];
@@ -364,7 +393,7 @@ function workoutHTML(p, ro) {
     '<h2>' + esc(p.freeName || t.name) + '</h2>' +
     '<div class="big"><div><strong class="num">' + fmtMin(st.min) + '</strong>durata</div><div><strong class="num">' + st.tss + '</strong>carico stimato</div>' +
     (p.deload ? '<div><span class="tag">Scarico</span></div>' : '') + '</div>' + chartSVG(sections) + '</div><div class="body">' +
-    '<p class="desc">' + esc(t.desc) + '</p>';
+    '<p class="desc">' + esc(t.desc) + '</p>' + focusHTML(t);
   if (p.challenge) h += '<div class="challenge">' + ico('flag') + '<div><b>Sfida del giorno</b><span>' + esc(p.challenge) + '</span></div></div>';
   if (t.test && p.status !== 'done') { const G = testGuess();
     h += '<div class="challenge" style="background:rgba(45,180,242,.07);border-color:rgba(45,180,242,.4)">' + ico('flag') + '<div style="flex:1"><b style="color:var(--hot2)">Oggi c\'è il test FTP</b><span>' +
@@ -394,7 +423,7 @@ function workoutHTML(p, ro) {
       const iv = p.sport !== 'indoor' && p.sport !== 'run' && S.profile.sports.indoor ? E.indoorVersion(p, S.profile) : null;
       h += '<div class="actions">' +
         (iv ? '<button class="btn wide" id="aIndoor"><span style="color:var(--indoor);display:flex">' + ico('indoor') + '</span>' + 'Falla sui rulli</button>' : '') +
-        '<button class="btn" id="aReroll">' + ico('dice') + 'Rilancia</button>' +
+        '<button class="btn" id="aReroll">' + ico('dice') + 'Alternative</button>' +
         (icuOn() ? '<button class="btn" id="aPush">' + (busy.push ? ico('sync', 'spin') : ico(p.pushed ? 'check' : 'send')) + (p.pushed ? 'Inviata' : 'Invia') + '</button>'
                  : '<button class="btn" id="aIcuHow">' + ico('link') + 'Invia…</button>') +
         '<button class="btn hot wide" id="aDone">' + ico('check') + 'Fatta! Sudato e goduto</button>' +
@@ -828,7 +857,7 @@ function welcomeHTML() {
   return '<div class="card" style="background:linear-gradient(135deg,rgba(45,180,242,.2),rgba(45,180,242,.05));border-color:rgba(45,180,242,.4)">' +
     '<h3>Benvenuto in SMG<span class="sp"></span><button class="btn ghost sm" id="wClose" style="padding:0 4px">' + ico('x') + '</button></h3>' +
     '<div class="t2" style="font-size:14px">Ogni mattina: <b style="color:var(--text)">check-in</b> di 10 secondi → <b style="color:var(--text)">semaforo</b> → seduta del giorno, sempre diversa. ' +
-    'Non ti piace? Tocca <b style="color:var(--text)">Rilancia</b>. Il <b style="color:var(--text)">?</b> in alto apre la guida. Nel Profilo collega Intervals.icu per mandarla su Fenix, Edge e MyWhoosh, e imposta la località per il meteo.</div></div>';
+    'Non ti piace? Tocca <b style="color:var(--text)">Alternative</b> e scegline un\'altra. Il <b style="color:var(--text)">?</b> in alto apre la guida. Nel Profilo collega Intervals.icu per mandarla su Fenix, Edge e MyWhoosh, e imposta la località per il meteo.</div></div>';
 }
 
 /* ------------------------------------------------------------------ */
@@ -891,15 +920,15 @@ function bindOggi(p) {
   });
   on('ciEdit', () => { editCI = true; history.pushState({ view: 'oggi', edit: 1 }, ''); render(); });
   on('ciCancel', () => { leaveEdit(); render(); });
-  document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts(o => { o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.reroll = 0; o.exclude = []; }));
+  document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts(o => { o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.picked = undefined; o.reroll = 0; o.exclude = []; }));
   document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => setOpts(o => { o.forceDur = b.dataset.dur ? +b.dataset.dur : undefined; }));
   on('aIndoor', () => {
     const pp = S.plans[d]; const iv = E.indoorVersion(pp, S.profile); if (!iv) return;
     const from = E.TEMPLATES[pp.tid].name;
-    setOpts(o => { o.forceSport = 'indoor'; o.forceTid = iv.tid; o.forceDur = iv.dur; o.exclude = []; });
+    setOpts(o => { o.forceSport = 'indoor'; o.forceTid = iv.tid; o.forceDur = iv.dur; o.picked = undefined; o.exclude = []; });
     toast(iv.same ? from + ': versione rulli pronta' : from + ' → ' + iv.name + ' sui rulli');
   });
-  on('aReroll', () => setOpts((o, pp) => { o.forceTid = undefined; o.reroll = (o.reroll || 0) + 1; o.exclude = [...(o.exclude || []), pp.tid].slice(-4); }));
+  on('aReroll', () => openAltSheet(d, 0));
   on('aPush', () => icuPush(S.plans[d]));
   on('aIcuHow', () => openSheet('<h3 style="margin:0 0 8px;font-size:20px">Inviala a Fenix, Edge e MyWhoosh</h3><p class="t2">Collega Intervals.icu nel Profilo: da lì la seduta arriva da sola su Garmin Connect (e quindi su orologio e ciclocomputer) e nel calendario di MyWhoosh.</p><button class="btn hot full" id="goProf">Vai al Profilo</button>',
     () => { document.getElementById('goProf').onclick = () => { closeSheet('profilo'); }; }));
@@ -1237,7 +1266,8 @@ const GUIDE = [
     <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>
     <p><b>Malanno</b> (nel check-in): con raffreddore o mal di gola solo sedute facili e più corte; con febbre o dolori diffusi riposo. Segnalo ogni giorno finché dura: dopo, 2-3 giorni di rientro graduale prima della qualità.</p>
     <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati. In <b>Come è calcolato il punteggio</b> trovi il contributo di ogni voce.</p>`],
-  ['bolt', 'La seduta del giorno', `<ul><li><b>Rilancia</b>: un'alternativa equivalente, se quella proposta non ti ispira.</li>
+  ['bolt', 'La seduta del giorno', `<ul><li><b>Alternative</b>: se la seduta non ti ispira, ti propone 3 sedute dello <b>stesso livello</b> (stesso stimolo e stesse regole di recupero) tra cui scegliere, con il grafico, la durata e cosa allenano. Prima quelle che non fai da un po' e con stimoli diversi tra loro; gli sport seguono meteo, luce e stagione (in inverno la qualità resta sui rulli). <b>Altre 3</b> ne mostra altre; <b>Automatico</b> nella riga Sport torna alla proposta di SMG.</li>
+    <li>Sotto la descrizione l'etichetta dice <b>cosa allena</b> la seduta (fondo, tecnica, tempo, sweet spot, forza, soglia, VO2max…).</li>
     <li>Tocca il <b>grafico della seduta</b> per aprire o chiudere il dettaglio dei blocchi.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
@@ -1252,7 +1282,7 @@ const GUIDE = [
     <li>Sport, da ottobre a marzo: <b>qualità sui rulli</b> (sedute dure a potenza, in ERG) e <b>volume fuori</b> (fondo e lunghi in MTB/gravel, rulli solo se piove). Da aprile a settembre più spazio alla strada e meno ai rulli.</li>
     <li>Sui rulli al massimo 70 minuti (si cambia nel Profilo, sotto "La tua settimana").</li>
     <li>Evita le sedute fatte di recente e lo sport di ieri.</li>
-    <li><b>Test FTP</b>: lo propone nella prima settimana dopo lo scarico, quando sei fresco, se sono passate almeno 6 settimane dall'ultimo (oltre 9 settimane anche in altre settimane, mai durante lo scarico). Solo con semaforo verde, di lunedì, mercoledì o sabato, sui rulli o con la bici da strada: sempre con gli <b>Stages</b>. Sui rulli il Tacx resta la sorgente primaria di MyWhoosh: i 20 minuti arrivano senza ERG (se non si spegne da solo, spegnilo tu) e fai fede ai watt degli Stages sul Fenix. Il giorno del test, sotto la seduta, <b>Istruzioni passo passo</b> spiega tutto: preparazione, partenza di Fenix e MyWhoosh, ritmo minuto per minuto (calcolato dall'FTP che ti aspetti) e cosa fare dopo. <b>Rilancia</b> lo rimanda.</li>
+    <li><b>Test FTP</b>: lo propone nella prima settimana dopo lo scarico, quando sei fresco, se sono passate almeno 6 settimane dall'ultimo (oltre 9 settimane anche in altre settimane, mai durante lo scarico). Solo con semaforo verde, di lunedì, mercoledì o sabato, sui rulli o con la bici da strada: sempre con gli <b>Stages</b>. Sui rulli il Tacx resta la sorgente primaria di MyWhoosh: i 20 minuti arrivano senza ERG (se non si spegne da solo, spegnilo tu) e fai fede ai watt degli Stages sul Fenix. Il giorno del test, sotto la seduta, <b>Istruzioni passo passo</b> spiega tutto: preparazione, partenza di Fenix e MyWhoosh, ritmo minuto per minuto (calcolato dall'FTP che ti aspetti) e cosa fare dopo. <b>Alternative</b> ti fa scegliere un'altra seduta dura (il test torna nei giorni successivi).</li>
     <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
     <p>Le etichette sotto la seduta spiegano il perché della scelta. Nelle sedute oltre 90 minuti (75 di corsa) trovi anche le indicazioni di <b>rifornimento</b>, adattate al meteo.</p>`],
   ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>
@@ -1273,7 +1303,7 @@ const GUIDE = [
     <li><b>Confronto Tacx / Stages</b>, una volta sola (Profilo → <b>Tacx e Stages</b>): dopo una seduta regolare scrivi i watt medi letti su MyWhoosh e sul Fenix. Entro il 3% non serve niente. Oltre, SMG ti dice quale FTP impostare su MyWhoosh (FTP × watt Tacx ÷ watt Stages), così in ERG pedali ai watt giusti; su Intervals e Garmin resta l'FTP vera. Rifallo solo se cambi qualcosa (batteria degli Stages, aggiornamento del Tacx).</li>
     <li><b>Test FTP</b>: ERG acceso per riscaldamento, allunghi e defaticamento; spento solo per i 20 minuti, in cui regoli lo sforzo con i rapporti guardando i watt sul Fenix. Fenix e MyWhoosh partono insieme e restano attivi tutti e due per tutta la seduta: MyWhoosh comanda il Tacx, il Fenix registra gli Stages e il risultato sono i suoi watt. Scegli un percorso piatto su MyWhoosh. Il Lap del Fenix parte da solo all'inizio dei 20 minuti. I test di Garmin e MyWhoosh hanno protocolli diversi: per confrontare i risultati nel tempo usa sempre quello di SMG.</li></ul>`],
   ['user', 'Profilo', `<ul><li><b>Test FTP</b>: vedi quando arriva il prossimo; <b>Anticipa</b> lo fa proporre al primo giorno verde di qualità. Dopo il test non devi scrivere niente: quando l'attività del Fenix arriva su Intervals, SMG trova da sola i 20 minuti con la potenza media più alta (dagli Stages), ti mostra potenza e FC medie e ti <b>chiede se aggiornare l'FTP</b> (95% della potenza). Puoi correggere i valori, confermare (FTP e FC di soglia vanno anche su Intervals.icu; ti ricorda di aggiornare MyWhoosh e Garmin Connect) oppure tenere l'FTP attuale. Se l'attività non si legge, <b>Inserisci risultato</b> funziona anche a mano, coi valori del Lap del Fenix. Se cambi l'FTP direttamente su Intervals, SMG lo prende come nuovo test.</li>
-    <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Tempi da concordare con chi ti segue.</li>
+    <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Ogni fase ha le sue sedute: nella <b>corsa facile</b> fondo, fondo in crescendo, corsa nel verde (terreno morbido) e passo corto e veloce (cadenza alta, utile per il piede); nella <b>completa</b> anche andature e allunghi, progressivo, ripetute lunghe in sweet spot, salite brevi, soglia, piramide e VO2max. Tempi da concordare con chi ti segue.</li>
     <li><b>La tua settimana</b>: giorni attivi, giorni lunghi, durata massima e ora in cui esci di solito (serve per buio e meteo).</li>
     <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Apri <b>Esercizi</b>: sotto ogni esercizio c'è una riga su come si fa. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>
     <li><b>Giorni speciali</b>: per una data precisa segni un impegno (niente allenamento) o un tempo diverso dal solito, anche in un giorno di solito libero. Si aggiungono qui o toccando un giorno futuro nel Diario; l'app ne tiene conto anche nell'anteprima e nella distribuzione delle sedute dure.</li></ul>`],

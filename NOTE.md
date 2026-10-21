@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 19 ottobre 2026 · versione app **1.8** · cache service worker `smg-org-v45`
+Aggiornate al 21 ottobre 2026 · versione app **1.9** · cache service worker `smg-org-v46`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -22,7 +22,10 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - **Check-in del mattino**: sensazione, HRV, FC a riposo, sonno, Training Readiness facoltativa (media 50/50), malanno (raffreddore oppure febbre). Semaforo verde ≥70, arancione ≥50, rosso sotto; dettaglio del punteggio voce per voce.
 - **Riquadri degli indicatori cliccabili** (HRV, FC a riposo, sonno, Forma, Training Readiness): andamento a 14, 30 o 60 giorni, fascia della norma per la HRV, valore del giorno toccando o scorrendo il grafico, media, minimo e massimo.
 - **Seduta stabile**: dopo il check-in la proposta non cambia più da sola. Se arrivano dati nuovi compare "Adegua la seduta / Tieni questa". Toccando il grafico della seduta si apre il dettaglio dei blocchi.
-- **Comandi della seduta**: chip Sport e Tempo a disposizione, Rilancia, Falla sui rulli, Invia, Fatta, "Decido io: esco con gli amici", Oggi salto (con alternativa di mobilità o forza).
+- **Comandi della seduta**: chip Sport e Tempo a disposizione, **Alternative**, Falla sui rulli, Invia, Fatta, "Decido io: esco con gli amici", Oggi salto (con alternativa di mobilità o forza).
+- **Alternative** (dalla v1.9, sostituisce Rilancia): scheda con 3 sedute dello **stesso livello** (stesso stimolo e stesse regole di recupero), ciascuna con grafico, durata, carico, cosa allena e descrizione; "Scelgo questa" la fissa (`opts.forceTid` + `forceSport`, `opts.picked`, motivo "Scelta da te tra le alternative"); "Altre 3" ne mostra altre; il chip Sport "Automatico" torna alla proposta di SMG. Motore: `E.alternatives(state, date, plan, opts, seed)`: sport con peso ≥12% del migliore secondo meteo, luce e stagione (in inverno le dure restano sui rulli), durata vicina a quella di oggi, preferenza per sedute non fatte da un po' e per stimoli (focus) e sport diversi tra loro; se a quel livello ce ne sono meno di 3, completa con il livello sotto.
+- **Cosa allena**: ogni seduta ha un `focus` (rec, fondo, tecnica, brio, tempo, ss, forza, soglia, vo2, sprint, test) con etichetta e frase in `FOCUS_INFO`, mostrata sotto la descrizione. Servirà anche per dare un tema ai blocchi.
+- **Libreria sedute** (v1.9: 44, prima 28). Nuove: bici: Fondo in crescendo, Tecnica di pedalata (rulli), Forza resistente (SFR), Sweet spot con strappi, Piramide di cadenza, Sweet spot lungo, Progressivo a terzi, Soglia con partenza forte, Soglia lunga, Settori a soglia (MTB), VO2max lunghi, 15/15, Ripetute in salita (MTB/strada). Corsa: Corsa nel verde e Passo corto e veloce (fase corsa facile), Andature e allunghi, Progressivo a terzi, Ripetute lunghe in sweet spot, Salite brevi, VO2max lunghi (fase completa). Versione rulli: Settori a soglia → Soglia lunga, Ripetute in salita → VO2max lunghi.
 - **Attività reali** (da Intervals):
   - In Oggi c'è sempre il riquadro "Fatto oggi" ("Oggi era riposo, ma ti sei allenato" nei giorni di riposo).
   - Nel Diario si vede l'attività vera, con la proposta di SMG accanto.
@@ -81,6 +84,11 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - Pubblicare a piccoli passi e verificare il deploy di GitHub Actions. GitHub Pages tiene i file in cache per circa 10 minuti, quindi gli aggiornamenti arrivano con qualche minuto di ritardo. Il 5 ottobre un guasto di GitHub ha bloccato una pubblicazione e l'ho dovuta rilanciare.
 - Prova delle modifiche con Playwright (Chromium già installato) e dati di Intervals e Open-Meteo simulati.
 
+**Varietà (decisa il 21 ottobre)**
+- Fabrizio non vuole annoiarsi, ma la varietà dev'essere sempre al servizio del miglioramento e degli stimoli allenanti: le alternative restano allo stesso livello, ogni seduta dice cosa allena, la progressione resta quella dei blocchi.
+- Varietà anche nella corsa, per quando riprende dopo la fascite.
+- Prossimo passo, dopo l'analisi del backup: un **tema per ogni blocco** di 4 settimane (es. ottobre–dicembre forza/sweet spot/tempo, gennaio–febbraio soglia, marzo–aprile VO2max) che pesa la scelta delle sedute per `focus`, con progressione vera dentro il tema (es. 3×10' → 3×12' → 2×20').
+
 **Procedura del test sui rulli (decisa il 19 ottobre: non richiederla)**
 - Fenix e MyWhoosh **attivi tutti e due per tutta la seduta**, avviati nello stesso momento con la seduta SMG del giorno. MyWhoosh comanda il Tacx (ERG nel riscaldamento, allunghi e defaticamento); il Fenix registra gli Stages, e **il risultato sono i watt del Fenix**, non quelli di MyWhoosh.
 - Su MyWhoosh: percorso **piatto** (senza ERG la resistenza segue la pendenza virtuale) e FTP nel profilo = stima × rapporto Tacx/Stages, solo per avere i watt giusti nel riscaldamento.
@@ -99,5 +107,5 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
    - Controllare se sforzo percepito e sensazione inseriti su Garmin compaiono nell'attività su Intervals (ora si vedono nel dettaglio attività di SMG). Se non compaiono, inserirli su Intervals.
    - Dopo la calibrazione di Stages e Tacx, rifare il confronto (Profilo → Tacx e Stages → Rifai) e impostare su MyWhoosh l'FTP indicata.
 2. **FTP**: rifare il test a breve (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. Primo test con la lettura automatica: verificare che i 20' trovati coincidano col Lap del Fenix e che MyWhoosh spenga davvero l'ERG al blocco Test.
-3. **26 ottobre: analisi del backup.** Esportare il backup da SMG e caricarlo in chat per tarare semaforo, livelli MTB senza potenza, progressione e frequenza del test.
+3. **26 ottobre: analisi del backup.** Esportare il backup da SMG e caricarlo in chat per tarare semaforo, livelli MTB senza potenza, progressione e frequenza del test. Poi impostare i **temi dei blocchi** (vedi Varietà) e rivedere pesi e progressione delle sedute nuove.
 4. **Quando riprende la corsa** (ora ferma per la fascite): impostare la progressione di rientro.
