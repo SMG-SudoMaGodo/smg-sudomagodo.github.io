@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.15';
+const APP_V = '1.16';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -95,11 +95,35 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 /* Meteo (Open-Meteo, senza account)                                   */
 /* ------------------------------------------------------------------ */
 function wxFor(d) { return S.wx && S.wx.days && S.wx.days[d] || null; }
+/* ---------- Località: casa o trasferta ---------- */
+// S.trip = { name, lat, lon, from, to } (date comprese): in quei giorni meteo, luce e proposta usano la trasferta
+const onTrip = d => !!(S.trip && S.trip.lat != null && S.trip.from <= d && d <= S.trip.to);
+const wxLoc = d => onTrip(d || today()) ? S.trip : S.loc;
+const locKey = L => L ? L.lat + ',' + L.lon : '';
+function tripCheck() {
+  if (S.trip && S.trip.to < today()) { const n = S.trip.name; delete S.trip; save(); setTimeout(() => toast('Trasferta a ' + n + ' finita: meteo di nuovo di casa'), 800); }
+}
 async function fetchWeather(force) {
-  if (!S.loc) return false;
-  // si riscarica se i dati sono vecchi o se mancano campi aggiunti in una versione nuova (es. punto di rugiada)
-  if (!force && S.wx && Date.now() - S.wx.at < 3600e3 && S.wx.days[today()] && S.wx.days[today()].hd && 'pol' in S.wx.days[today()] && S.wx.days[today()].hw) return false;
-  const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon +
+  tripCheck();
+  if (!S.loc && !S.trip) return false;
+  const need = [0, 1, 2].map(i => E.addDays(today(), i)).filter(d => wxLoc(d));
+  if (!need.length) return false;
+  const sig = need.map(d => locKey(wxLoc(d))).join('|');
+  const t = S.wx && S.wx.days && S.wx.days[today()];
+  // si riscarica se i dati sono vecchi, se è cambiata la località o se mancano campi aggiunti in una versione nuova
+  if (!force && S.wx && S.wx.sig === sig && Date.now() - S.wx.at < 3600e3 && t && t.hd && 'pol' in t && t.hw) return false;
+  const locs = []; need.forEach(d => { const L = wxLoc(d); if (!locs.some(x => locKey(x) === locKey(L))) locs.push(L); });
+  const res = await Promise.all(locs.map(fetchFor));
+  if (res.some(x => !x)) return false;
+  const days = {};
+  locs.forEach((L, i) => Object.keys(res[i]).forEach(d => {
+    const want = d <= need[need.length - 1] ? wxLoc(d) : wxLoc(need[need.length - 1]);
+    if (want && locKey(want) === locKey(L)) days[d] = Object.assign(res[i][d], { loc: L.name });
+  }));
+  S.wx = { at: Date.now(), days, sig }; save(); return true;
+}
+async function fetchFor(L) {
+  const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + L.lat + '&longitude=' + L.lon +
     '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m,dew_point_2m,precipitation,wind_speed_10m,wind_gusts_10m,weather_code&timezone=auto&forecast_days=3';
   try {
     const r = await fetch(u); if (!r.ok) throw 0; const j = await r.json(); const days = {};
@@ -120,7 +144,7 @@ async function fetchWeather(force) {
     });
     // pollini (CAMS Europa via Open-Meteo): media giornaliera per tipo, in granuli/m³
     try {
-      const pr = await fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon + '&hourly=' + POL_KEYS.map(k => k + '_pollen').join(',') + '&timezone=auto&forecast_days=3');
+      const pr = await fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' + L.lat + '&longitude=' + L.lon + '&hourly=' + POL_KEYS.map(k => k + '_pollen').join(',') + '&timezone=auto&forecast_days=3');
       if (!pr.ok) throw 0; const pj = await pr.json();
       Object.keys(days).forEach(d => {
         const pol = {}; let any = false;
@@ -133,8 +157,8 @@ async function fetchWeather(force) {
         days[d].pol = any ? pol : null;
       });
     } catch (e) { Object.keys(days).forEach(d => { days[d].pol = null; days[d].polErr = true; }); }
-    S.wx = { at: Date.now(), days }; save(); return true;
-  } catch (e) { return false; }
+    return days;
+  } catch (e) { return null; }
 }
 function locate() {
   if (!navigator.geolocation) { toast('Posizione non disponibile'); return; }
@@ -905,7 +929,7 @@ function openWxSheet(d, inPlace) {
   const upd = new Date(S.wx.at), updTxt = (E.ymd(upd) === today() ? 'oggi' : 'il ' + upd.getDate() + '/' + (upd.getMonth() + 1)) + ' alle ' + String(upd.getHours()).padStart(2, '0') + ':' + String(upd.getMinutes()).padStart(2, '0');
   put('<div class="guide wxs"><h2>Meteo · ' + name(d).toLowerCase() + '</h2><p class="mut wxupd" style="font-size:12.5px;margin:-2px 0 8px">' + ico('sync') + ' Aggiornato ' + updTxt + '</p>' + tabs + tiles +
     '<div class="wxro" id="wxRo">Tocca o scorri un grafico per leggere i valori ora per ora.' + (band ? ' In azzurro le ore in cui esci.' : '') + '</div>' + chT + chP + chM + chW + strip +
-    '<p class="mut" style="font-size:12.5px;margin-top:10px">Fonte: Open-Meteo, modello migliore per la tua località' + (S.loc && S.loc.name ? ' (' + esc(S.loc.name) + ')' : '') + '. Le zone scure sono le ore di buio. SMG riscarica il meteo quando apri l\'app, se è passata più di un\'ora.</p><button class="btn full" id="wxOk">Chiudi</button></div>', () => {
+    '<p class="mut" style="font-size:12.5px;margin-top:10px">Fonte: Open-Meteo, modello migliore per la località' + (w.loc ? ' (' + esc(w.loc) + (onTrip(d) ? ', trasferta' : '') + ')' : '') + '. Le zone scure sono le ore di buio. SMG riscarica il meteo quando apri l\'app, se è passata più di un\'ora.</p><button class="btn full" id="wxOk">Chiudi</button></div>', () => {
       bindTabs();
       document.getElementById('wxOk').onclick = () => closeSheet();
       const svgs = ['wxT', 'wxP', 'wxM', 'wxW'].map(i => document.getElementById(i)).filter(Boolean);
@@ -968,8 +992,9 @@ function planLine(d) {
 }
 function weatherHTML(d) {
   const t = E.addDays(d, 1);
-  if (!S.loc) return '<div class="card wxc"><div class="empty">' + ico('pin') + '<div style="flex:1">Imposta la località per vedere il meteo di oggi e domani</div><button class="btn sm" id="wxSet">Imposta</button></div>' + planLine(d) + '</div>';
-  return '<div class="card wxc"><div class="days">' + wxDayHTML(d, 'Oggi', '') + wxDayHTML(t, 'Domani, ' + GG[E.parse(t).getDay()], 'tmw') + '</div>' + planLine(d) + '</div>';
+  if (!S.loc && !S.trip) return '<div class="card wxc"><div class="empty">' + ico('pin') + '<div style="flex:1">Imposta la località per vedere il meteo di oggi e domani</div><button class="btn sm" id="wxSet">Imposta</button></div>' + planLine(d) + '</div>';
+  const tl = S.trip && S.trip.to >= d ? '<div class="trip">' + ico('pin') + '<span>' + (onTrip(d) ? 'In trasferta a <b>' + esc(S.trip.name) + '</b> fino a ' + longDate(S.trip.to).toLowerCase() : 'Trasferta a <b>' + esc(S.trip.name) + '</b> da ' + longDate(S.trip.from).toLowerCase()) + '</span></div>' : '';
+  return '<div class="card wxc">' + tl + '<div class="days">' + wxDayHTML(d, 'Oggi', '') + wxDayHTML(t, 'Domani, ' + GG[E.parse(t).getDay()], 'tmw') + '</div>' + planLine(d) + '</div>';
 }
 
 // riepilogo della settimana appena chiusa: compare lunedì e martedì finché non lo chiudi
@@ -1345,7 +1370,7 @@ function renderProfilo() {
     (S.icu.ok ? '<button class="btn ghost sm full" id="iOff" style="margin-top:8px">Scollega</button>' : '') + '</div>';
 
   h += '<div class="card"><h3>Meteo</h3><div class="set"><div class="l"><b>' + esc(S.loc ? S.loc.name : 'Nessuna località') + '</b><small>Con pioggia, freddo o buio nelle tue ore la proposta va sui rulli</small></div><button class="btn sm" id="lHere">' + ico('pin') + 'Qui</button></div>' +
-    '<div class="row" style="margin-top:6px"><input id="lQ" placeholder="Cerca un comune…"><button class="btn" id="lFind" style="flex:none">Cerca</button></div><div class="results" id="lRes"></div></div>';
+    '<div class="row" style="margin-top:6px"><input id="lQ" placeholder="Cerca un comune…"><button class="btn" id="lFind" style="flex:none">Cerca</button></div><div class="results" id="lRes"></div>' + tripHTML() + '</div>';
 
   h += '<div class="card"><h3>Dati</h3><div class="mut" style="font-size:13px;margin-bottom:10px">Tutto resta nel telefono. Fai un backup una volta al mese (la chiave API non viene esportata).' +
     (icuOn() ? ' Le sedute inviate e i dati di salute si recuperano comunque da Intervals.icu.' : '') +
@@ -1397,6 +1422,7 @@ function bindProfilo() {
   g('blkEarly').onclick = () => { const nd = E.nextDeload(P, today()); const d = E.addDays(nd, -7); if (d < curMon) { toast('Lo scarico è già questa settimana'); return; } setAnchor(d, 'Scarico anticipato di una settimana'); };
   g('blkLate').onclick = () => { setAnchor(E.addDays(E.nextDeload(P, today()), 7), 'Scarico posticipato di una settimana'); };
   g('blkNow').onclick = () => setAnchor(curMon, 'Settimana di scarico da oggi');
+  bindTrip();
   const find = async () => {
     const q = g('lQ').value.trim(); if (q.length < 2) return;
     try {
@@ -1469,6 +1495,7 @@ const GUIDE = [
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
     <li><b>Punto di rugiada</b> (nelle ore in cui esci): dice quanto è afosa l'aria, cioè quanto fatichi a smaltire il calore. <span style="color:#4ADE80">●</span> fino a 16° confortevole, <span style="color:#FACC15">●</span> 17–18° si sente, <span style="color:#F87171">●</span> 19–21° pesante: rallenta il ritmo e bevi di più, <span style="color:#C084FC">●</span> da 22° molto pesante: solo sedute facili o rulli con ventilatore. Conta soprattutto per la corsa. Il valore è il <b>massimo nelle ore in cui esci</b>, non quello di adesso: tocca il pallino per vedere ora per ora e il valore attuale.</li>
+    <li><b>Trasferta</b> (Profilo → Meteo): in ferie o in viaggio indichi la località e le date. In quei giorni meteo, luce (alba e tramonto) e proposte usano quella località; sopra il meteo vedi dove sei e fino a quando. Il giorno dopo la fine torna da sola quella di casa; <b>Sono tornato</b> la chiude prima.</li>
     <li><b>Previsioni dettagliate</b>: tocca il riquadro di oggi o di domani. Si apre la schermata con i grafici ora per ora di temperatura e punto di rugiada, probabilità di pioggia, millimetri previsti ora per ora (con il totale) e vento con raffiche, più la striscia ora per ora. In azzurro le ore in cui esci, in scuro le ore di buio; tocca o scorri un grafico per leggere i valori di quell'ora. In alto scegli oggi, domani o dopodomani e vedi l'ora dell'ultimo aggiornamento: SMG riscarica il meteo quando apri l'app, se è passata più di un'ora (i pollini cambiano una volta al giorno).</li>
     <li><b>Pollini</b>: il pallino prende il polline messo peggio tra graminacee, betulla, ontano, olivo, artemisia e ambrosia (media della giornata, previsione CAMS Europa). Classi della rete italiana POLLnet: <span style="color:#4ADE80">●</span> assenti, <span style="color:#FACC15">●</span> bassi, <span style="color:#FB923C">●</span> medi, <span style="color:#F87171">●</span> alti; grigio = fuori stagione. Tocca il pallino per il dettaglio di ogni polline. Cipresso, nocciolo, ortica e altri non sono previsti: per quelli c'è il bollettino ARPA.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
@@ -1789,6 +1816,47 @@ function openTestSheet(d) {
         render();
       };
     });
+}
+// trasferta (ferie, viaggio): località temporanea con date di inizio e fine
+let tripEdit = null;   // bozza mentre la imposti: { name, lat, lon, from, to }
+function tripHTML() {
+  const T = S.trip;
+  let h = '<div class="tripbox"><div class="set"><div class="l"><b>Trasferta</b><small>' +
+    (T ? (onTrip(today()) ? 'Ora sei a <b style="color:var(--text)">' + esc(T.name) + '</b> fino a ' + longDate(T.to).toLowerCase() : 'A <b style="color:var(--text)">' + esc(T.name) + '</b> da ' + longDate(T.from).toLowerCase() + ' a ' + longDate(T.to).toLowerCase()) +
+      '. In quei giorni meteo, luce e proposte usano questa località; poi si torna da sola a casa.' : 'In ferie o in viaggio? Indica dove sei e fino a quando: in quei giorni il meteo è di lì, poi torna da solo quello di casa.') + '</small></div>' +
+    (T && !tripEdit ? '<button class="btn sm" id="tEnd">' + (onTrip(today()) ? 'Sono tornato' : 'Annulla') + '</button>' : '') + '</div>';
+  if (!tripEdit) return h + '<button class="btn sm full" id="tNew" style="margin-top:6px">' + ico('pin') + (T ? 'Modifica la trasferta' : 'Sono in trasferta') + '</button></div>';
+  const e = tripEdit;
+  return h + '<div class="row" style="margin-top:6px"><input id="tQ" placeholder="Dove sei? Cerca un comune…" value="' + esc(e.q || '') + '"><button class="btn" id="tFind" style="flex:none">Cerca</button></div><div class="results" id="tRes"></div>' +
+    (e.name ? '<div class="src" style="margin:8px 0 0">' + ico('pin') + esc(e.name) + '</div>' : '') +
+    '<div class="row" style="margin-top:8px"><div class="field"><label>Dal</label><input type="date" id="tFrom" value="' + e.from + '"></div><div class="field"><label>Al (compreso)</label><input type="date" id="tTo" value="' + e.to + '"></div></div>' +
+    '<div class="row" style="margin-top:8px"><button class="btn" id="tCancel">Annulla</button><button class="btn hot" id="tSave"' + (e.name ? '' : ' disabled') + '>Salva</button></div></div>';
+}
+function bindTrip() {
+  const g = id => document.getElementById(id);
+  const after = async (msg) => { save(); render(); toast(msg); await fetchWeather(true); refreshToday(!(S.plans[today()] || {}).lightUsed); render(); };
+  if (g('tNew')) g('tNew').onclick = () => { tripEdit = S.trip ? Object.assign({}, S.trip) : { from: today(), to: E.addDays(today(), 6) }; render(); setTimeout(() => { const q = g('tQ'); if (q && !tripEdit.name) q.focus(); }, 50); };
+  if (g('tEnd')) g('tEnd').onclick = () => { const back = onTrip(today()); delete S.trip; after(back ? 'Bentornato: meteo di nuovo di casa' : 'Trasferta annullata'); };
+  if (!tripEdit) return;
+  const keep = () => { tripEdit.q = g('tQ').value; tripEdit.from = g('tFrom').value || tripEdit.from; tripEdit.to = g('tTo').value || tripEdit.to; };
+  const find = async () => {
+    keep(); const q = tripEdit.q.trim(); if (q.length < 2) return;
+    try {
+      const res = await searchPlace(q);
+      g('tRes').innerHTML = res.length ? res.map((r, i) => '<button data-i="' + i + '">' + esc(r.name) + '</button>').join('') : '<div class="mut" style="margin-top:8px">Nessun risultato</div>';
+      g('tRes').querySelectorAll('button').forEach(b => b.onclick = () => { keep(); Object.assign(tripEdit, res[+b.dataset.i]); render(); });
+    } catch (e) { toast('Ricerca non riuscita'); }
+  };
+  g('tFind').onclick = find; g('tQ').onkeydown = e => { if (e.key === 'Enter') find(); };
+  g('tCancel').onclick = () => { tripEdit = null; render(); };
+  g('tSave').onclick = () => {
+    keep(); const e = tripEdit;
+    if (!e.name) { toast('Scegli prima la località'); return; }
+    if (!e.from || !e.to || e.to < e.from) { toast('Controlla le date: la fine viene dopo l\'inizio'); return; }
+    if (e.to < today()) { toast('La trasferta è già finita'); return; }
+    S.trip = { name: e.name, lat: e.lat, lon: e.lon, from: e.from, to: e.to }; tripEdit = null;
+    after(onTrip(today()) ? 'Meteo di ' + S.trip.name + ' fino a ' + longDate(S.trip.to).toLowerCase() : 'Trasferta salvata: da ' + longDate(S.trip.from).toLowerCase() + ' meteo di ' + S.trip.name);
+  };
 }
 function openSheet(html, bind) {
   $('#sheetBody').innerHTML = html; $('#sheet').classList.add('on'); if (bind) bind();

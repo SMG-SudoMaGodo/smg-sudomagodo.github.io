@@ -807,7 +807,8 @@ function sunMin(date, lat, lon) {
 function daylight(state, date, w) {
   const hm = t => { const m = String(t || '').match(/T(\d{2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
   if (w && w.sunset) { const a = hm(w.sunrise), b = hm(w.sunset); if (a != null && b != null) return { rise: a, set: b }; }
-  if (state.loc && state.loc.lat != null) return sunMin(date, +state.loc.lat, +state.loc.lon);
+  const L = state.trip && state.trip.lat != null && state.trip.from <= date && date <= state.trip.to ? state.trip : state.loc;
+  if (L && L.lat != null) return sunMin(date, +L.lat, +L.lon);
   return null;
 }
 const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Math.round(m % 60)).padStart(2, '0');
