@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.11';
+const APP_V = '1.12';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -98,9 +98,9 @@ function wxFor(d) { return S.wx && S.wx.days && S.wx.days[d] || null; }
 async function fetchWeather(force) {
   if (!S.loc) return false;
   // si riscarica se i dati sono vecchi o se mancano campi aggiunti in una versione nuova (es. punto di rugiada)
-  if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()] && S.wx.days[today()].hd && 'pol' in S.wx.days[today()]) return false;
+  if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()] && S.wx.days[today()].hd && 'pol' in S.wx.days[today()] && S.wx.days[today()].hw) return false;
   const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon +
-    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m,dew_point_2m&timezone=auto&forecast_days=3';
+    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m,dew_point_2m,precipitation,wind_speed_10m,wind_gusts_10m,weather_code&timezone=auto&forecast_days=3';
   try {
     const r = await fetch(u); if (!r.ok) throw 0; const j = await r.json(); const days = {};
     j.daily.time.forEach((d, i) => days[d] = { code: j.daily.weather_code[i], tmax: j.daily.temperature_2m_max[i], tmin: j.daily.temperature_2m_min[i],
@@ -110,6 +110,9 @@ async function fetchWeather(force) {
     if (j.hourly && j.hourly.time) Object.keys(days).forEach(d => {
       const pr = [], tp = [], dp = []; j.hourly.time.forEach((h, i) => { if (h.slice(0, 10) === d) { const hh = +h.slice(11, 13); pr[hh] = j.hourly.precipitation_probability[i] || 0; if (j.hourly.temperature_2m) tp[hh] = Math.round(j.hourly.temperature_2m[i]); if (j.hourly.dew_point_2m && j.hourly.dew_point_2m[i] != null) dp[hh] = Math.round(j.hourly.dew_point_2m[i]); } });
       if (dp.length) days[d].hd = Array.from({ length: 24 }, (_, h) => dp[h] == null ? null : dp[h]);
+      // per la schermata meteo: pioggia in mm, vento, raffiche e tempo ora per ora
+      const hv = k => { const a = []; j.hourly.time.forEach((h, i) => { if (h.slice(0, 10) === d && j.hourly[k]) a[+h.slice(11, 13)] = j.hourly[k][i]; }); return Array.from({ length: 24 }, (_, h) => a[h] == null ? null : +a[h]); };
+      days[d].hm = hv('precipitation'); days[d].hw = hv('wind_speed_10m'); days[d].hg = hv('wind_gusts_10m'); days[d].hc = hv('weather_code');
       days[d].hp = Array.from({ length: 24 }, (_, h) => pr[h] || 0); if (tp.length) days[d].ht = Array.from({ length: 24 }, (_, h) => tp[h] == null ? null : tp[h]);
       let best = null;
       for (let h = 7; h <= 16; h++) { const v = Math.max(pr[h] || 0, pr[h + 1] || 0, pr[h + 2] || 0); if (best == null || v < best.v) best = { h, v }; }
@@ -816,11 +819,112 @@ function openWxTip(kind, d) {
     '<p class="mut" style="font-size:13px;margin-top:10px">Fonte: previsione CAMS Europa (Copernicus) via Open-Meteo, griglia di 11 km, 4 giorni. Classi della rete italiana POLLnet (ISPRA/ARPA): <span style="color:#4ADE80">●</span> assente, <span style="color:#FACC15">●</span> bassa, <span style="color:#FB923C">●</span> media, <span style="color:#F87171">●</span> alta. Indicano quanti pollini ci sono, non il rischio di allergia, che dipende dalla persona. ' +
     'Non sono previsti cipresso, nocciolo, carpino, ortica, castagno e altri: per quelli guarda il bollettino dell\'ARPA della tua regione.</p><button class="btn full" id="tipOk">Chiudi</button></div>', () => { document.getElementById('tipOk').onclick = () => closeSheet(); });
 }
+/* ---------- Schermata meteo: grafici ora per ora ---------- */
+const WX_T = '#C8742A', WX_B = '#1F94CC', WX_N = '#8FA0B8';
+function wxChart(id, title, legend, series, opt) {
+  // series: [{v:[24], color, dash, label}] · opt: {min, max, bars, unit, fmt, band:[h0,h1], sun:[rise,set], lab}
+  const W = 340, H = opt.h || 120, L = 30, R = 8, T = 10, B = 20, pw = W - L - R, ph = H - T - B;
+  const all = series.flatMap(x => x.v.filter(v => v != null));
+  let mn = opt.min != null ? opt.min : Math.floor(Math.min(...all) - 1), mx = opt.max != null ? opt.max : Math.ceil(Math.max(...all) + 1);
+  if (mx - mn < 4) mx = mn + 4;
+  const X = h => L + (h + 0.5) / 24 * pw, Y = v => T + ph - (v - mn) / (mx - mn) * ph;
+  let g = '';
+  if (opt.sun) { const [a, b] = opt.sun; if (a > 0) g += '<rect x="' + L + '" y="' + T + '" width="' + (a / 24 * pw).toFixed(1) + '" height="' + ph + '" fill="#000" opacity=".22"/>'; if (b < 24) g += '<rect x="' + (L + b / 24 * pw).toFixed(1) + '" y="' + T + '" width="' + ((24 - b) / 24 * pw).toFixed(1) + '" height="' + ph + '" fill="#000" opacity=".22"/>'; }
+  if (opt.band) g += '<rect x="' + (L + opt.band[0] / 24 * pw).toFixed(1) + '" y="' + T + '" width="' + ((opt.band[1] - opt.band[0] + 1) / 24 * pw).toFixed(1) + '" height="' + ph + '" fill="var(--hot2)" opacity=".10"/>' +
+    (opt.lab ? '<text x="' + (L + (opt.band[0] + opt.band[1] + 1) / 48 * pw).toFixed(1) + '" y="' + (T + 9) + '" text-anchor="middle" class="ax" style="fill:var(--hot2)">uscita</text>' : '');
+  const ticks = opt.ticks || [mn, Math.round((mn + mx) / 2), mx];
+  ticks.forEach(v => { g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '" stroke="var(--line)" stroke-width="1"/><text x="' + (L - 5) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" text-anchor="end" class="ax">' + (opt.fmt ? opt.fmt(v) : v) + '</text>'; });
+  for (let h = 0; h < 24; h += 3) g += '<text x="' + X(h).toFixed(1) + '" y="' + (H - 5) + '" text-anchor="middle" class="ax">' + h + '</text>';
+  series.forEach(sr => {
+    if (opt.bars) {
+      const bw = pw / 24 - 2;
+      sr.v.forEach((v, h) => { if (!v) return; const y = Y(v), hh = T + ph - y; if (hh < 0.5) return;
+        const r = Math.min(4, bw / 2, hh); const x0 = X(h) - bw / 2;
+        g += '<path d="M' + x0.toFixed(1) + ' ' + (T + ph) + 'V' + (y + r).toFixed(1) + 'q0 -' + r + ' ' + r + ' -' + r + 'h' + (bw - 2 * r).toFixed(1) + 'q' + r + ' 0 ' + r + ' ' + r + 'V' + (T + ph) + 'Z" fill="' + sr.color + '"/>'; });
+    } else {
+      let d = '', pen = false;
+      sr.v.forEach((v, h) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(h).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; });
+      g += '<path d="' + d + '" fill="none" stroke="' + sr.color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"' + (sr.dash ? ' stroke-dasharray="4 4"' : '') + '/>';
+    }
+  });
+  if (opt.marks) g += opt.marks(X, Y);
+  g += '<line class="xh" x1="0" x2="0" y1="' + T + '" y2="' + (T + ph) + '" stroke="var(--text)" stroke-width="1" opacity="0"/>';
+  series.forEach((sr, i) => { if (!opt.bars) g += '<circle class="xd" data-i="' + i + '" r="4" fill="' + sr.color + '" stroke="var(--s1)" stroke-width="2" opacity="0"/>'; });
+  return '<div class="wxch"><div class="sh"><b>' + title + '</b>' + (legend || '') + '</div><svg id="' + id + '" viewBox="0 0 ' + W + ' ' + H + '" data-l="' + L + '" data-pw="' + pw + '" data-mn="' + mn + '" data-mx="' + mx + '" data-t="' + T + '" data-ph="' + ph + '">' + g + '</svg></div>';
+}
+const legItem = (c, t, dash) => '<span class="lg"><i style="background:' + (dash ? 'repeating-linear-gradient(90deg,' + c + ' 0 4px,transparent 4px 7px)' : c) + '"></i>' + t + '</span>';
+function openWxSheet(d) {
+  const keys = Object.keys((S.wx && S.wx.days) || {}).filter(k => k >= today()).sort().slice(0, 3);
+  if (!keys.length) return;
+  if (!keys.includes(d)) d = keys[0];
+  const w = wxFor(d);
+  const name = k => k === today() ? 'Oggi' : k === E.addDays(today(), 1) ? 'Domani' : GG[E.parse(k).getDay()].replace(/^./, c => c.toUpperCase());
+  const n0 = v => v == null ? '–' : String(Math.round(v * 10) / 10).replace('.', ',');
+  const hm = (t) => t ? t.slice(11, 16) : '–';
+  const tabs = '<div class="chips" style="margin:2px 0 12px">' + keys.map(k => '<button class="chip' + (k === d ? ' on' : '') + '" data-wxd="' + k + '">' + name(k) + '</button>').join('') + '</div>';
+  if (!w.hw) {
+    openSheet('<div class="guide"><h2>Meteo</h2>' + tabs + '<p class="intro">Sto scaricando le previsioni ora per ora: riapri tra un attimo.</p></div>', bindTabs);
+    fetchWeather(true).then(ok => { if (ok) { render(); if (sheetOpen()) { closeSheet(); setTimeout(() => openWxSheet(d), 80); } } });
+    return;
+  }
+  const cfg = E.dayCfg(S, d), [b0, b1] = outHours(d);
+  const band = cfg.on ? [b0, b1] : null;
+  const sunH = t => { const m = String(t || '').match(/T(\d{2}):(\d{2})/); return m ? +m[1] + +m[2] / 60 : null; };
+  const sun = w.sunrise && w.sunset ? [sunH(w.sunrise), sunH(w.sunset)] : null;
+  const mmTot = (w.hm || []).reduce((a, b) => a + (b || 0), 0);
+  const gMax = Math.max(0, ...(w.hg || []).filter(v => v != null));
+  const dw = dewAt(d, w), pw = polWorst(w);
+  const tile = (v, l) => '<div class="tile"><b class="num">' + v + '</b><small>' + l + '</small></div>';
+  const tiles = '<div class="tiles at" style="margin-bottom:12px">' + tile(Math.round(w.tmax) + '° / ' + Math.round(w.tmin) + '°', 'max / min') +
+    tile(w.rain + '%', 'pioggia' + (mmTot >= 0.1 ? ' · ' + n0(mmTot) + ' mm' : '')) + tile(Math.round(w.wind) + '', 'vento km/h' + (gMax ? ' · raffiche ' + Math.round(gMax) : '')) +
+    tile(hm(w.sunrise) + ' · ' + hm(w.sunset), 'alba · tramonto') + (dw ? tile(dw.v + '°', 'rugiada in uscita') : '') + (pw && pw.c >= 0 ? tile(POL_N[pw.c], 'pollini · ' + POL[pw.k][0].toLowerCase()) : '') + '</div>';
+  const tMin = Math.floor(Math.min(...w.ht.filter(v => v != null), ...(w.hd || []).filter(v => v != null)) - 1);
+  const tMax = Math.ceil(Math.max(...w.ht.filter(v => v != null)) + 1);
+  const tStep = tMax - tMin > 16 ? 10 : 5, tTicks = []; for (let v = Math.ceil(tMin / tStep) * tStep; v <= tMax; v += tStep) tTicks.push(v);
+  const iMax = w.ht.reduce((b, v, i) => v != null && (b < 0 || v > w.ht[b]) ? i : b, -1), iMin = w.ht.reduce((b, v, i) => v != null && (b < 0 || v < w.ht[b]) ? i : b, -1);
+  const chT = wxChart('wxT', 'Temperatura e punto di rugiada', legItem(WX_T, 'aria') + legItem(WX_B, 'rugiada', true),
+    [{ v: w.ht, color: WX_T }, { v: w.hd || [], color: WX_B, dash: true }],
+    { min: tMin, max: tMax, ticks: tTicks, fmt: v => v + '°', band, sun, lab: true, h: 130,
+      marks: (X, Y) => [iMax, iMin].filter(i => i >= 0).map((i, k) => '<text x="' + X(i).toFixed(1) + '" y="' + (Y(w.ht[i]) + (k ? 13 : -6)).toFixed(1) + '" text-anchor="middle" class="ax" style="fill:var(--text);font-weight:700">' + w.ht[i] + '°</text>').join('') });
+  const pMarks = (X, Y) => (w.hm || []).map((v, h) => v >= 0.5 ? '<text x="' + X(h).toFixed(1) + '" y="' + (Y(w.hp[h] || 0) - 4).toFixed(1) + '" text-anchor="middle" class="ax" style="fill:var(--text)">' + n0(v) + '</text>' : '').join('');
+  const chP = wxChart('wxP', 'Probabilità di pioggia', '<span class="lg mut">numeri = mm previsti</span>', [{ v: w.hp, color: WX_B }], { min: 0, max: 100, ticks: [0, 50, 100], fmt: v => v + '%', bars: true, band, sun, marks: pMarks });
+  const wMax = Math.max(20, ...(w.hg || []).filter(v => v != null)) + 5;
+  const chW = wxChart('wxW', 'Vento (km/h)', legItem(WX_N, 'medio') + legItem(WX_N, 'raffiche', true), [{ v: w.hw, color: WX_N }, { v: w.hg || [], color: WX_N, dash: true }],
+    { min: 0, max: Math.ceil(wMax / 10) * 10, ticks: [0, Math.ceil(wMax / 20) * 10, Math.ceil(wMax / 10) * 10], band, sun });
+  const h0 = d === today() ? new Date().getHours() : 6;
+  const strip = '<div class="wxstrip">' + Array.from({ length: 24 - h0 }, (_, i) => h0 + i).map(h => '<div' + (band && h >= band[0] && h <= band[1] ? ' class="on"' : '') + '><small>' + h + ':00</small>' + wxIcon(w.hc[h] != null ? w.hc[h] : w.code) +
+    '<b>' + (w.ht[h] != null ? w.ht[h] + '°' : '–') + '</b><small style="color:' + ((w.hp[h] || 0) >= 50 ? 'var(--hot2)' : 'var(--mut)') + '">' + (w.hp[h] || 0) + '%</small></div>').join('') + '</div>';
+  openSheet('<div class="guide wxs"><h2>Meteo · ' + name(d).toLowerCase() + '</h2>' + tabs + tiles +
+    '<div class="wxro" id="wxRo">Tocca o scorri un grafico per leggere i valori ora per ora.' + (band ? ' In azzurro le ore in cui esci.' : '') + '</div>' + chT + chP + chW + strip +
+    '<p class="mut" style="font-size:12.5px;margin-top:10px">Fonte: Open-Meteo, modello migliore per la tua località' + (S.loc && S.loc.name ? ' (' + esc(S.loc.name) + ')' : '') + '. Le zone scure sono le ore di buio.</p><button class="btn full" id="wxOk">Chiudi</button></div>', () => {
+      bindTabs();
+      document.getElementById('wxOk').onclick = () => closeSheet();
+      const svgs = ['wxT', 'wxP', 'wxW'].map(i => document.getElementById(i));
+      const ro = document.getElementById('wxRo');
+      const show = h => {
+        svgs.forEach(sv => {
+          const L = +sv.dataset.l, pw = +sv.dataset.pw, mn = +sv.dataset.mn, mx = +sv.dataset.mx, T = +sv.dataset.t, ph = +sv.dataset.ph;
+          const x = L + (h + 0.5) / 24 * pw, ln = sv.querySelector('.xh'); ln.setAttribute('x1', x); ln.setAttribute('x2', x); ln.setAttribute('opacity', '.5');
+          const vals = sv.id === 'wxT' ? [w.ht[h], (w.hd || [])[h]] : sv.id === 'wxW' ? [w.hw[h], (w.hg || [])[h]] : [];
+          sv.querySelectorAll('.xd').forEach(c => { const v = vals[+c.dataset.i]; if (v == null) { c.setAttribute('opacity', 0); return; } c.setAttribute('cx', x); c.setAttribute('cy', T + ph - (v - mn) / (mx - mn) * ph); c.setAttribute('opacity', 1); });
+        });
+        ro.innerHTML = '<b>' + String(h).padStart(2, '0') + ':00</b> · ' + WXD(w.hc[h] != null ? w.hc[h] : w.code).toLowerCase() + ' · <b>' + n0(w.ht[h]) + '°</b> (rugiada ' + n0((w.hd || [])[h]) + '°) · pioggia ' + (w.hp[h] || 0) + '%' + ((w.hm || [])[h] ? ' ' + n0(w.hm[h]) + ' mm' : '') + ' · vento ' + Math.round(w.hw[h] || 0) + (w.hg && w.hg[h] ? ' (raffiche ' + Math.round(w.hg[h]) + ')' : '') + ' km/h';
+      };
+      svgs.forEach(sv => {
+        const pick = e => { const r = sv.getBoundingClientRect(), sc = 340 / r.width, L = +sv.dataset.l, pw = +sv.dataset.pw;
+          const h = Math.max(0, Math.min(23, Math.floor(((e.clientX - r.left) * sc - L) / pw * 24))); show(h); };
+        sv.addEventListener('pointerdown', pick); sv.addEventListener('pointermove', pick);
+      });
+      show(d === today() ? new Date().getHours() : (band ? band[0] : 12));
+    });
+  function bindTabs() { document.querySelectorAll('[data-wxd]').forEach(b => b.onclick = () => { const k = b.dataset.wxd; closeSheet(); setTimeout(() => openWxSheet(k), 80); }); }
+}
+document.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-wx]'); if (t && !e.target.closest('[data-tip]')) { e.preventDefault(); openWxSheet(t.dataset.wx); } });
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-tip]'); if (b) { e.preventDefault(); const [k, d] = b.dataset.tip.split('|'); openWxTip(k, d); } });
 function wxDayHTML(d, label, cls) {
   const w = wxFor(d);
   if (!w) return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="desc" style="margin-top:10px">Previsioni non disponibili</div></div>';
-  return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="main">' + wxIcon(w.code) +
+  return '<div class="wxd tapc ' + cls + '" data-wx="' + d + '"><div class="dn">' + label + '</div><div class="main">' + wxIcon(w.code) +
     '<div><div class="tmax num">' + Math.round(w.tmax) + '°</div><div class="tmin num">' + Math.round(w.tmin) + '°</div></div></div>' +
     '<div class="desc">' + WXD(w.code) + '</div><div class="meta"><span style="color:' + (w.rain >= 50 ? 'var(--hot2)' : 'inherit') + '">' + drop + w.rain + '%' + (w.mm >= 0.5 ? ' · ' + Math.round(w.mm) + ' mm' : '') + '</span>' +
     '<span>' + wind + Math.round(w.wind) + ' km/h</span>' + dewHTML(d, w) + polHTML(d, w) + (w.sunset ? '<span title="Tramonto">' + sunIco + w.sunset.slice(11, 16) + '</span>' : '') + '</div></div>';
@@ -1356,6 +1460,7 @@ const GUIDE = [
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
     <li><b>Punto di rugiada</b> (nelle ore in cui esci): dice quanto è afosa l'aria, cioè quanto fatichi a smaltire il calore. <span style="color:#4ADE80">●</span> fino a 16° confortevole, <span style="color:#FACC15">●</span> 17–18° si sente, <span style="color:#F87171">●</span> 19–21° pesante: rallenta il ritmo e bevi di più, <span style="color:#C084FC">●</span> da 22° molto pesante: solo sedute facili o rulli con ventilatore. Conta soprattutto per la corsa. Il valore è il <b>massimo nelle ore in cui esci</b>, non quello di adesso: tocca il pallino per vedere ora per ora e il valore attuale.</li>
+    <li><b>Previsioni dettagliate</b>: tocca il riquadro di oggi o di domani. Si apre la schermata con i grafici ora per ora di temperatura e punto di rugiada, probabilità di pioggia (con i mm previsti) e vento con raffiche, più la striscia ora per ora. In azzurro le ore in cui esci, in scuro le ore di buio; tocca o scorri un grafico per leggere i valori di quell'ora. In alto scegli oggi, domani o dopodomani.</li>
     <li><b>Pollini</b>: il pallino prende il polline messo peggio tra graminacee, betulla, ontano, olivo, artemisia e ambrosia (media della giornata, previsione CAMS Europa). Classi della rete italiana POLLnet: <span style="color:#4ADE80">●</span> assenti, <span style="color:#FACC15">●</span> bassi, <span style="color:#FB923C">●</span> medi, <span style="color:#F87171">●</span> alti; grigio = fuori stagione. Tocca il pallino per il dettaglio di ogni polline. Cipresso, nocciolo, ortica e altri non sono previsti: per quelli c'è il bollettino ARPA.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Quando da Intervals arriva l'attività vera, il diario mostra quella (nome, sport, durata, livello) con accanto la proposta di SMG. Tocca un giorno passato per vedere cosa hai fatto e la seduta proposta, o per segnarla.</li>
