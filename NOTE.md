@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 21 ottobre 2026 · versione app **1.9** · cache service worker `smg-org-v46`
+Aggiornate al 21 ottobre 2026 · versione app **1.10** · cache service worker `smg-org-v47`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -25,7 +25,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - **Comandi della seduta**: chip Sport e Tempo a disposizione, **Alternative**, Falla sui rulli, Invia, Fatta, "Decido io: esco con gli amici", Oggi salto (con alternativa di mobilità o forza).
 - **Alternative** (dalla v1.9, sostituisce Rilancia): scheda con 3 sedute dello **stesso livello** (stesso stimolo e stesse regole di recupero), ciascuna con grafico, durata, carico, cosa allena e descrizione; "Scelgo questa" la fissa (`opts.forceTid` + `forceSport`, `opts.picked`, motivo "Scelta da te tra le alternative"); "Altre 3" ne mostra altre; il chip Sport "Automatico" torna alla proposta di SMG. Motore: `E.alternatives(state, date, plan, opts, seed)`: sport con peso ≥12% del migliore secondo meteo, luce e stagione (in inverno le dure restano sui rulli), durata vicina a quella di oggi, preferenza per sedute non fatte da un po' e per stimoli (focus) e sport diversi tra loro; se a quel livello ce ne sono meno di 3, completa con il livello sotto.
 - **Cosa allena**: ogni seduta ha un `focus` (rec, fondo, tecnica, brio, tempo, ss, forza, soglia, vo2, sprint, test) con etichetta e frase in `FOCUS_INFO`, mostrata sotto la descrizione. Servirà anche per dare un tema ai blocchi.
-- **Libreria sedute** (v1.9: 44, prima 28). Nuove: bici: Fondo in crescendo, Tecnica di pedalata (rulli), Forza resistente (SFR), Sweet spot con strappi, Piramide di cadenza, Sweet spot lungo, Progressivo a terzi, Soglia con partenza forte, Soglia lunga, Settori a soglia (MTB), VO2max lunghi, 15/15, Ripetute in salita (MTB/strada). Corsa: Corsa nel verde e Passo corto e veloce (fase corsa facile), Andature e allunghi, Progressivo a terzi, Ripetute lunghe in sweet spot, Salite brevi, VO2max lunghi (fase completa). Versione rulli: Settori a soglia → Soglia lunga, Ripetute in salita → VO2max lunghi.
+- **Libreria sedute** (v1.9: 44, prima 28). Nuove: bici: Fondo in crescendo, Tecnica di pedalata (rulli), Forza resistente (SFR), Sweet spot con strappi, Piramide di cadenza, Sweet spot lungo, Progressivo a terzi, Soglia con partenza forte, Soglia lunga, Settori a soglia (MTB), VO2max lunghi, 15/15, Ripetute in salita (MTB/strada). Corsa: Corsa nel verde e Passo corto e veloce (fase corsa facile), Andature e allunghi, Progressivo a terzi, Ripetute lunghe in sweet spot, Salite brevi, VO2max lunghi (fase completa). - **Falla sui rulli** (dalla v1.10): per le sedute solo all'aperto `INDOOR_EQ` ha 2-3 gemelle indoor dello stesso livello; si sceglie quella non fatta da più tempo (a parità, rotazione secondo la data). Es. Fartlek collinare → Sweet spot con strappi / Tempo a blocchi / Piramide di cadenza; Salite in tempo → SFR / Tempo a blocchi / Piramide di cadenza; Lungo con finale in tempo (minimo 80', oltre il massimo sui rulli) → Progressivo / Sweet spot lungo / Tempo a blocchi.
 - **Attività reali** (da Intervals):
   - In Oggi c'è sempre il riquadro "Fatto oggi" ("Oggi era riposo, ma ti sei allenato" nei giorni di riposo).
   - Nel Diario si vede l'attività vera, con la proposta di SMG accanto.
@@ -63,6 +63,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - Corsa in pausa per la fascite (al 19 ottobre non permette ancora il rientro). Quando riprende, rientro graduale con le fasi già previste (cammino e corsa → corsa facile → completa).
 
 **Rulli e potenza**
+- **Cadenza su MyWhoosh** (21 ottobre): non ancora verificata su questo setup. A fine 2025 sul forum di Intervals c'erano segnalazioni contrastanti (rpm non arrivati ad agosto 2025, funzionanti a dicembre 2025, con valori singoli). Dalla v1.10 SMG invia la cadenza come valore singolo arrotondato a 5 (es. `55rpm`), non più come fascia (`50-60rpm`). Da verificare alla prima seduta con cadenza (SFR, Giochi di cadenza, Piramide di cadenza).
 - Su MyWhoosh il Tacx Flux 2S è l'unico misuratore e comanda l'ERG. Gli Stages (pedivella sulla bici da strada) restano solo sul Fenix, che registra la stessa seduta.
 - Sul Fenix il Tacx non va abbinato come rullo né come potenza; come solo sensore di velocità via ANT+ va bene.
 - Sul Fenix si può avviare anche la seduta SMG, partendo insieme a MyWhoosh e con gli avvisi di obiettivo spenti.
@@ -105,6 +106,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 1. **Verifiche alle prossime sedute indoor**
    - Controllare che la seduta SMG arrivi su MyWhoosh nonostante il permesso "Attività" tolto, e che su Intervals arrivi solo l'attività del Fenix.
    - Controllare se sforzo percepito e sensazione inseriti su Garmin compaiono nell'attività su Intervals (ora si vedono nel dettaglio attività di SMG). Se non compaiono, inserirli su Intervals.
+   - Alla prima seduta con cadenza (SFR, Giochi di cadenza, Piramide di cadenza): su MyWhoosh compare l'obiettivo in rpm? E sul Fenix?
    - Dopo la calibrazione di Stages e Tacx, rifare il confronto (Profilo → Tacx e Stages → Rifai) e impostare su MyWhoosh l'FTP indicata.
 2. **FTP**: rifare il test a breve (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. Primo test con la lettura automatica: verificare che i 20' trovati coincidano col Lap del Fenix e che MyWhoosh spenga davvero l'ERG al blocco Test.
 3. **26 ottobre: analisi del backup.** Esportare il backup da SMG e caricarlo in chat per tarare semaforo, livelli MTB senza potenza, progressione e frequenza del test. Poi impostare i **temi dei blocchi** (vedi Varietà) e rivedere pesi e progressione delle sedute nuove.

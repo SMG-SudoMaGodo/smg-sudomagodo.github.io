@@ -273,8 +273,8 @@ const T = [
     desc: 'Blocchi a ritmo tempo in cui la cadenza sale ogni 2 minuti, da 70 a 100 rpm, a parità di sforzo. Allena forza e agilità insieme e ti fa trovare la cadenza più efficiente.',
     build(D, s) {
       const n = clamp(Math.floor((D - 22) / 11), 2, 6);
-      return assemble(D, s, warmup(s, 12), [sec('Piramide di cadenza', [st('Z3', 2, 'Cadenza 70', [70, 75]), st('Z3', 2, 'Cadenza 80', [80, 85]),
-        st('Z3', 2, 'Cadenza 90', [90, 95]), st('Z3', 2, 'Cadenza 100', [100, 105]), st('Z2', 3, 'Recupero agile')], n)], 8);
+      return assemble(D, s, warmup(s, 12), [sec('Piramide di cadenza', [st('Z3', 2, 'Cadenza bassa', [68, 72]), st('Z3', 2, 'Cadenza media', [78, 82]),
+        st('Z3', 2, 'Cadenza sciolta', [88, 92]), st('Z3', 2, 'Cadenza alta', [98, 102]), st('Z2', 3, 'Recupero agile')], n)], 8);
     } },
   { id: 'ss_long', name: 'Sweet spot lungo', level: 3, sports: ['indoor', 'road'], dur: [60, 120],
     desc: 'Due blocchi lunghi appena sotto la soglia: il lavoro che alza di più l\'FTP con una fatica che si recupera in fretta. Cadenza fluida, respiro profondo, testa sul ritmo.',
@@ -1080,14 +1080,28 @@ function alternatives(state, date, plan, opts, seed) {
 /* ------------------------------------------------------------------ */
 /* Versione rulli di una seduta all'aperto                             */
 /* ------------------------------------------------------------------ */
-const INDOOR_EQ = { explorer: 'end_steady', hilly_long: 'end_steady', free_ride: 'end_cad', tempo_climbs: 'tempo_blocks',
-  fartlek: 'tempo_blocks', thr_climbs: 'threshold', hill_hunt: 'vo2_3', mtb_sector: 'thr_2x', climb_reps: 'vo2_long' };
-function indoorVersion(plan, profile) {
+// sedute equivalenti sui rulli (stesso livello, stimolo simile): si sceglie quella che non fai da più tempo
+const INDOOR_EQ = {
+  explorer: ['end_steady', 'end_prog', 'end_cad'], hilly_long: ['end_steady', 'end_prog', 'end_cad'], free_ride: ['end_cad', 'end_prog', 'end_strides'],
+  tempo_climbs: ['sfr', 'tempo_blocks', 'tempo_cad'], fartlek: ['ss_surges', 'tempo_blocks', 'tempo_cad'], long_finish: ['progressive', 'ss_long', 'tempo_blocks'],
+  thr_climbs: ['threshold', 'thr_2x', 'thr_surge'], mtb_sector: ['thr_2x', 'threshold', 'thr_surge'],
+  hill_hunt: ['vo2_3', 'v3030', 'vo2_long'], climb_reps: ['vo2_long', 'vo2_3', 'micro1515']
+};
+function indoorVersion(plan, profile, state) {
   const t = TEMPLATES[plan.tid];
-  const tid = t.sports.includes('indoor') ? t.id : INDOOR_EQ[t.id] || null;
-  if (!tid) return null;
-  const tpl = TEMPLATES[tid];
   const cap = (profile && profile.indoorMax) || 70;
+  let tid = null;
+  if (t.sports.includes('indoor') && t.dur[0] <= cap) tid = t.id;
+  else {
+    const list = (INDOOR_EQ[t.id] || []).filter(x => TEMPLATES[x] && TEMPLATES[x].dur[0] <= cap);
+    if (!list.length) return null;
+    // la meno recente (mai fatta = la migliore); a parità, a rotazione secondo la data
+    const lu = state ? context(state, plan.date).lastUse : {};
+    const off = hash(plan.date + '|' + t.id) % list.length;
+    const ord = list.map((x, i) => list[(i + off) % list.length]);
+    tid = ord.reduce((best, x) => ((lu[x] == null ? 999 : lu[x]) > (lu[best] == null ? 999 : lu[best]) ? x : best), ord[0]);
+  }
+  const tpl = TEMPLATES[tid];
   return { tid, same: tid === t.id, name: tpl.name, dur: Math.max(tpl.dur[0], Math.min(plan.dur, cap)) };
 }
 
@@ -1164,7 +1178,8 @@ function toIcu(plan, sections) {
     lines.push(s.rep > 1 ? cleanTxt(s.title) + ' ' + s.rep + 'x' : cleanTxt(s.title));
     s.steps.forEach(x => {
       let l = '- ' + (x.txt ? cleanTxt(x.txt) + ' ' : '') + icuDur(x.d) + ' ' + (x.free && plan.sport === 'indoor' ? 'freeride' : icuTarget(x.z, plan.sport));
-      if (x.cad && SPORTS[plan.sport].target === 'power') l += ' ' + x.cad[0] + '-' + x.cad[1] + 'rpm';
+      // cadenza come valore singolo (centro della fascia): è il formato che MyWhoosh legge (come nei file .zwo)
+      if (x.cad && SPORTS[plan.sport].target === 'power') l += ' ' + Math.round((x.cad[0] + x.cad[1]) / 10) * 5 + 'rpm';
       lines.push(l);
     });
     lines.push('');

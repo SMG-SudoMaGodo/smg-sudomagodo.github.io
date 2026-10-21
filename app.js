@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.9';
+const APP_V = '1.10';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -420,7 +420,7 @@ function workoutHTML(p, ro) {
         sports.map(s => '<button class="chip' + (fs === s ? ' on' : '') + '" data-sport="' + s + '">' + E.SPORTS[s].name + '</button>').join('') + '</div>' +
         '<div class="lab">Tempo a disposizione</div><div class="chips"><button class="chip' + (!fd ? ' on' : '') + '" data-dur="">Automatico</button>' +
         [30, 45, 60, 75, 90, 105, 120, 150].filter(m => m <= maxD).map(m => '<button class="chip' + (fd === m ? ' on' : '') + '" data-dur="' + m + '">' + fmtMin(m) + '</button>').join('') + '</div></div>';
-      const iv = p.sport !== 'indoor' && p.sport !== 'run' && S.profile.sports.indoor ? E.indoorVersion(p, S.profile) : null;
+      const iv = p.sport !== 'indoor' && p.sport !== 'run' && S.profile.sports.indoor ? E.indoorVersion(p, S.profile, S) : null;
       h += '<div class="actions">' +
         (iv ? '<button class="btn wide" id="aIndoor"><span style="color:var(--indoor);display:flex">' + ico('indoor') + '</span>' + 'Falla sui rulli</button>' : '') +
         '<button class="btn" id="aReroll">' + ico('dice') + 'Alternative</button>' +
@@ -923,7 +923,7 @@ function bindOggi(p) {
   document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts(o => { o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.picked = undefined; o.reroll = 0; o.exclude = []; }));
   document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => setOpts(o => { o.forceDur = b.dataset.dur ? +b.dataset.dur : undefined; }));
   on('aIndoor', () => {
-    const pp = S.plans[d]; const iv = E.indoorVersion(pp, S.profile); if (!iv) return;
+    const pp = S.plans[d]; const iv = E.indoorVersion(pp, S.profile, S); if (!iv) return;
     const from = E.TEMPLATES[pp.tid].name;
     setOpts(o => { o.forceSport = 'indoor'; o.forceTid = iv.tid; o.forceDur = iv.dur; o.picked = undefined; o.exclude = []; });
     toast(iv.same ? from + ': versione rulli pronta' : from + ' → ' + iv.name + ' sui rulli');
@@ -1270,7 +1270,8 @@ const GUIDE = [
     <li>Sotto la descrizione l'etichetta dice <b>cosa allena</b> la seduta (fondo, tecnica, tempo, sweet spot, forza, soglia, VO2max…).</li>
     <li>Tocca il <b>grafico della seduta</b> per aprire o chiudere il dettaglio dei blocchi.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
-    <li><b>Falla sui rulli</b>: la stessa seduta (o la sua gemella indoor) con obiettivi in watt per il Tacx.</li>
+    <li><b>Falla sui rulli</b>: la stessa seduta con obiettivi in watt per il Tacx. Se esiste solo all'aperto (fartlek, salite, settori, caccia alle salite…) sceglie tra 2-3 gemelle indoor dello stesso livello e stimolo simile, quella che non fai da più tempo: per esempio il Fartlek collinare diventa Sweet spot con strappi, Tempo a blocchi o Piramide di cadenza. Dopo puoi sempre toccare <b>Alternative</b>.</li>
+    <li><b>Cadenza</b>: nelle sedute con una cadenza da tenere (SFR, giochi e piramide di cadenza, frullini) la cadenza arriva a MyWhoosh come obiettivo in rpm insieme ai watt; in SMG la vedi nel dettaglio della seduta.</li>
     <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola. Con <b>Oggi salto</b> la seduta sparisce anche da Garmin e MyWhoosh, la settimana si riequilibra (una seduta dura saltata può tornare nei giorni dopo) e puoi scegliere un'alternativa breve di mobilità o forza leggera in base al tempo che hai. <b>Annulla</b> la rimette.</li>
     <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li>
     <li><b>Decido io: esco con gli amici</b>: scegli sport, durata e "che aria tira" (tranquilla, mista, garosa). Sul Fenix non arriva nessun allenamento strutturato: registri l'uscita come sempre e SMG, leggendo da Intervals com'è andata davvero, regola i giorni dopo (se è stata dura, il giorno dopo si scarica). Funziona anche nei giorni di riposo. <b>Proposta SMG</b> rimette la seduta originale.</li></ul>
