@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.13';
+const APP_V = '1.14';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -877,7 +877,7 @@ function openWxSheet(d) {
   const tile = (v, l) => '<div class="tile"><b class="num">' + v + '</b><small>' + l + '</small></div>';
   const tiles = '<div class="tiles at" style="margin-bottom:12px">' + tile(Math.round(w.tmax) + '° / ' + Math.round(w.tmin) + '°', 'max / min') +
     tile(w.rain + '%', 'pioggia' + (mmTot >= 0.1 ? ' · ' + n0(mmTot) + ' mm' : '')) + tile(Math.round(w.wind) + '', 'vento km/h' + (gMax ? ' · raffiche ' + Math.round(gMax) : '')) +
-    tile(hm(w.sunrise) + ' · ' + hm(w.sunset), 'alba · tramonto') + (dw ? tile(dw.v + '°', 'rugiada in uscita') : '') + (pw && pw.c >= 0 ? tile(POL_N[pw.c], 'pollini · ' + POL[pw.k][0].toLowerCase()) : '') + '</div>';
+    tile(hm(w.sunrise) + ' · ' + hm(w.sunset), 'alba · tramonto') + (dw ? tile(dw.v + '°', 'rugiada in uscita') : '') + (pw && pw.c >= 0 ? tile(POL_N[pw.c], pw.c > 0 ? 'pollini · ' + POL[pw.k][0].toLowerCase() : 'pollini') : '') + '</div>';
   const tMin = Math.floor(Math.min(...w.ht.filter(v => v != null), ...(w.hd || []).filter(v => v != null)) - 1);
   const tMax = Math.ceil(Math.max(...w.ht.filter(v => v != null)) + 1);
   const tStep = tMax - tMin > 16 ? 10 : 5, tTicks = []; for (let v = Math.ceil(tMin / tStep) * tStep; v <= tMax; v += tStep) tTicks.push(v);
@@ -886,8 +886,14 @@ function openWxSheet(d) {
     [{ v: w.ht, color: WX_T }, { v: w.hd || [], color: WX_B, dash: true }],
     { min: tMin, max: tMax, ticks: tTicks, fmt: v => v + '°', band, sun, lab: true, h: 130,
       marks: (X, Y) => [iMax, iMin].filter(i => i >= 0).map((i, k) => '<text x="' + X(i).toFixed(1) + '" y="' + (Y(w.ht[i]) + (k ? 13 : -6)).toFixed(1) + '" text-anchor="middle" class="ax" style="fill:var(--text);font-weight:700">' + w.ht[i] + '°</text>').join('') });
-  const pMarks = (X, Y) => (w.hm || []).map((v, h) => v >= 0.5 ? '<text x="' + X(h).toFixed(1) + '" y="' + (Y(w.hp[h] || 0) - 4).toFixed(1) + '" text-anchor="middle" class="ax" style="fill:var(--text)">' + n0(v) + '</text>' : '').join('');
-  const chP = wxChart('wxP', 'Probabilità di pioggia', '<span class="lg mut">numeri = mm previsti</span>', [{ v: w.hp, color: WX_B }], { min: 0, max: 100, ticks: [0, 50, 100], fmt: v => v + '%', bars: true, band, sun, marks: pMarks });
+  const chP = wxChart('wxP', 'Probabilità di pioggia', '', [{ v: w.hp, color: WX_B }], { min: 0, max: 100, ticks: [0, 50, 100], fmt: v => v + '%', bars: true, band, sun });
+  // quantità: grafico a parte (un asse per grafico), scritto solo il picco
+  const mmA = (w.hm || []).map(v => v || 0), mmMax = Math.max(0, ...mmA), iPk = mmA.indexOf(mmMax);
+  const mmTop = mmMax <= 1 ? 1 : mmMax <= 2 ? 2 : mmMax <= 5 ? 5 : Math.ceil(mmMax / 5) * 5;
+  const chM = mmTot >= 0.1 ? wxChart('wxM', 'Pioggia prevista', '<span class="lg">totale <b style="color:var(--text);margin-left:3px">' + n0(mmTot) + ' mm</b></span>', [{ v: mmA, color: WX_B }],
+    { min: 0, max: mmTop, ticks: [0, mmTop / 2, mmTop], fmt: v => n0(v), bars: true, band, sun, h: 100,
+      marks: (X, Y) => '<text x="' + Math.min(Math.max(X(iPk), 46), 322).toFixed(1) + '" y="' + (Y(mmMax) - 4).toFixed(1) + '" text-anchor="middle" class="ax" style="fill:var(--text);font-weight:700">' + n0(mmMax) + ' mm</text>' })
+    : '<p class="mut" style="font-size:13px;margin:-6px 2px 14px">Nessuna pioggia prevista in quantità misurabile.</p>';
   const wMax = Math.max(20, ...(w.hg || []).filter(v => v != null)) + 5;
   const chW = wxChart('wxW', 'Vento (km/h)', legItem(WX_N, 'medio') + legItem(WX_N, 'raffiche', true), [{ v: w.hw, color: WX_N }, { v: w.hg || [], color: WX_N, dash: true }],
     { min: 0, max: Math.ceil(wMax / 10) * 10, ticks: [0, Math.ceil(wMax / 20) * 10, Math.ceil(wMax / 10) * 10], band, sun });
@@ -896,11 +902,11 @@ function openWxSheet(d) {
     '<b>' + (w.ht[h] != null ? w.ht[h] + '°' : '–') + '</b><small style="color:' + ((w.hp[h] || 0) >= 50 ? 'var(--hot2)' : 'var(--mut)') + '">' + (w.hp[h] || 0) + '%</small></div>').join('') + '</div>';
   const upd = new Date(S.wx.at), updTxt = (E.ymd(upd) === today() ? 'oggi' : 'il ' + upd.getDate() + '/' + (upd.getMonth() + 1)) + ' alle ' + String(upd.getHours()).padStart(2, '0') + ':' + String(upd.getMinutes()).padStart(2, '0');
   openSheet('<div class="guide wxs"><h2>Meteo · ' + name(d).toLowerCase() + '</h2><p class="mut wxupd" style="font-size:12.5px;margin:-2px 0 8px">' + ico('sync') + ' Aggiornato ' + updTxt + '</p>' + tabs + tiles +
-    '<div class="wxro" id="wxRo">Tocca o scorri un grafico per leggere i valori ora per ora.' + (band ? ' In azzurro le ore in cui esci.' : '') + '</div>' + chT + chP + chW + strip +
+    '<div class="wxro" id="wxRo">Tocca o scorri un grafico per leggere i valori ora per ora.' + (band ? ' In azzurro le ore in cui esci.' : '') + '</div>' + chT + chP + chM + chW + strip +
     '<p class="mut" style="font-size:12.5px;margin-top:10px">Fonte: Open-Meteo, modello migliore per la tua località' + (S.loc && S.loc.name ? ' (' + esc(S.loc.name) + ')' : '') + '. Le zone scure sono le ore di buio. SMG riscarica il meteo quando apri l\'app, se è passata più di un\'ora.</p><button class="btn full" id="wxOk">Chiudi</button></div>', () => {
       bindTabs();
       document.getElementById('wxOk').onclick = () => closeSheet();
-      const svgs = ['wxT', 'wxP', 'wxW'].map(i => document.getElementById(i));
+      const svgs = ['wxT', 'wxP', 'wxM', 'wxW'].map(i => document.getElementById(i)).filter(Boolean);
       const ro = document.getElementById('wxRo');
       const show = h => {
         svgs.forEach(sv => {
@@ -1461,7 +1467,7 @@ const GUIDE = [
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
     <li><b>Punto di rugiada</b> (nelle ore in cui esci): dice quanto è afosa l'aria, cioè quanto fatichi a smaltire il calore. <span style="color:#4ADE80">●</span> fino a 16° confortevole, <span style="color:#FACC15">●</span> 17–18° si sente, <span style="color:#F87171">●</span> 19–21° pesante: rallenta il ritmo e bevi di più, <span style="color:#C084FC">●</span> da 22° molto pesante: solo sedute facili o rulli con ventilatore. Conta soprattutto per la corsa. Il valore è il <b>massimo nelle ore in cui esci</b>, non quello di adesso: tocca il pallino per vedere ora per ora e il valore attuale.</li>
-    <li><b>Previsioni dettagliate</b>: tocca il riquadro di oggi o di domani. Si apre la schermata con i grafici ora per ora di temperatura e punto di rugiada, probabilità di pioggia (con i mm previsti) e vento con raffiche, più la striscia ora per ora. In azzurro le ore in cui esci, in scuro le ore di buio; tocca o scorri un grafico per leggere i valori di quell'ora. In alto scegli oggi, domani o dopodomani e vedi l'ora dell'ultimo aggiornamento: SMG riscarica il meteo quando apri l'app, se è passata più di un'ora (i pollini cambiano una volta al giorno).</li>
+    <li><b>Previsioni dettagliate</b>: tocca il riquadro di oggi o di domani. Si apre la schermata con i grafici ora per ora di temperatura e punto di rugiada, probabilità di pioggia, millimetri previsti ora per ora (con il totale) e vento con raffiche, più la striscia ora per ora. In azzurro le ore in cui esci, in scuro le ore di buio; tocca o scorri un grafico per leggere i valori di quell'ora. In alto scegli oggi, domani o dopodomani e vedi l'ora dell'ultimo aggiornamento: SMG riscarica il meteo quando apri l'app, se è passata più di un'ora (i pollini cambiano una volta al giorno).</li>
     <li><b>Pollini</b>: il pallino prende il polline messo peggio tra graminacee, betulla, ontano, olivo, artemisia e ambrosia (media della giornata, previsione CAMS Europa). Classi della rete italiana POLLnet: <span style="color:#4ADE80">●</span> assenti, <span style="color:#FACC15">●</span> bassi, <span style="color:#FB923C">●</span> medi, <span style="color:#F87171">●</span> alti; grigio = fuori stagione. Tocca il pallino per il dettaglio di ogni polline. Cipresso, nocciolo, ortica e altri non sono previsti: per quelli c'è il bollettino ARPA.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Quando da Intervals arriva l'attività vera, il diario mostra quella (nome, sport, durata, livello) con accanto la proposta di SMG. Tocca un giorno passato per vedere cosa hai fatto e la seduta proposta, o per segnarla.</li>
