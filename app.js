@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.12';
+const APP_V = '1.13';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -98,7 +98,7 @@ function wxFor(d) { return S.wx && S.wx.days && S.wx.days[d] || null; }
 async function fetchWeather(force) {
   if (!S.loc) return false;
   // si riscarica se i dati sono vecchi o se mancano campi aggiunti in una versione nuova (es. punto di rugiada)
-  if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()] && S.wx.days[today()].hd && 'pol' in S.wx.days[today()] && S.wx.days[today()].hw) return false;
+  if (!force && S.wx && Date.now() - S.wx.at < 3600e3 && S.wx.days[today()] && S.wx.days[today()].hd && 'pol' in S.wx.days[today()] && S.wx.days[today()].hw) return false;
   const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon +
     '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m,dew_point_2m,precipitation,wind_speed_10m,wind_gusts_10m,weather_code&timezone=auto&forecast_days=3';
   try {
@@ -894,9 +894,10 @@ function openWxSheet(d) {
   const h0 = d === today() ? new Date().getHours() : 6;
   const strip = '<div class="wxstrip">' + Array.from({ length: 24 - h0 }, (_, i) => h0 + i).map(h => '<div' + (band && h >= band[0] && h <= band[1] ? ' class="on"' : '') + '><small>' + h + ':00</small>' + wxIcon(w.hc[h] != null ? w.hc[h] : w.code) +
     '<b>' + (w.ht[h] != null ? w.ht[h] + '°' : '–') + '</b><small style="color:' + ((w.hp[h] || 0) >= 50 ? 'var(--hot2)' : 'var(--mut)') + '">' + (w.hp[h] || 0) + '%</small></div>').join('') + '</div>';
-  openSheet('<div class="guide wxs"><h2>Meteo · ' + name(d).toLowerCase() + '</h2>' + tabs + tiles +
+  const upd = new Date(S.wx.at), updTxt = (E.ymd(upd) === today() ? 'oggi' : 'il ' + upd.getDate() + '/' + (upd.getMonth() + 1)) + ' alle ' + String(upd.getHours()).padStart(2, '0') + ':' + String(upd.getMinutes()).padStart(2, '0');
+  openSheet('<div class="guide wxs"><h2>Meteo · ' + name(d).toLowerCase() + '</h2><p class="mut wxupd" style="font-size:12.5px;margin:-2px 0 8px">' + ico('sync') + ' Aggiornato ' + updTxt + '</p>' + tabs + tiles +
     '<div class="wxro" id="wxRo">Tocca o scorri un grafico per leggere i valori ora per ora.' + (band ? ' In azzurro le ore in cui esci.' : '') + '</div>' + chT + chP + chW + strip +
-    '<p class="mut" style="font-size:12.5px;margin-top:10px">Fonte: Open-Meteo, modello migliore per la tua località' + (S.loc && S.loc.name ? ' (' + esc(S.loc.name) + ')' : '') + '. Le zone scure sono le ore di buio.</p><button class="btn full" id="wxOk">Chiudi</button></div>', () => {
+    '<p class="mut" style="font-size:12.5px;margin-top:10px">Fonte: Open-Meteo, modello migliore per la tua località' + (S.loc && S.loc.name ? ' (' + esc(S.loc.name) + ')' : '') + '. Le zone scure sono le ore di buio. SMG riscarica il meteo quando apri l\'app, se è passata più di un\'ora.</p><button class="btn full" id="wxOk">Chiudi</button></div>', () => {
       bindTabs();
       document.getElementById('wxOk').onclick = () => closeSheet();
       const svgs = ['wxT', 'wxP', 'wxW'].map(i => document.getElementById(i));
@@ -1460,7 +1461,7 @@ const GUIDE = [
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
     <li><b>Punto di rugiada</b> (nelle ore in cui esci): dice quanto è afosa l'aria, cioè quanto fatichi a smaltire il calore. <span style="color:#4ADE80">●</span> fino a 16° confortevole, <span style="color:#FACC15">●</span> 17–18° si sente, <span style="color:#F87171">●</span> 19–21° pesante: rallenta il ritmo e bevi di più, <span style="color:#C084FC">●</span> da 22° molto pesante: solo sedute facili o rulli con ventilatore. Conta soprattutto per la corsa. Il valore è il <b>massimo nelle ore in cui esci</b>, non quello di adesso: tocca il pallino per vedere ora per ora e il valore attuale.</li>
-    <li><b>Previsioni dettagliate</b>: tocca il riquadro di oggi o di domani. Si apre la schermata con i grafici ora per ora di temperatura e punto di rugiada, probabilità di pioggia (con i mm previsti) e vento con raffiche, più la striscia ora per ora. In azzurro le ore in cui esci, in scuro le ore di buio; tocca o scorri un grafico per leggere i valori di quell'ora. In alto scegli oggi, domani o dopodomani.</li>
+    <li><b>Previsioni dettagliate</b>: tocca il riquadro di oggi o di domani. Si apre la schermata con i grafici ora per ora di temperatura e punto di rugiada, probabilità di pioggia (con i mm previsti) e vento con raffiche, più la striscia ora per ora. In azzurro le ore in cui esci, in scuro le ore di buio; tocca o scorri un grafico per leggere i valori di quell'ora. In alto scegli oggi, domani o dopodomani e vedi l'ora dell'ultimo aggiornamento: SMG riscarica il meteo quando apri l'app, se è passata più di un'ora (i pollini cambiano una volta al giorno).</li>
     <li><b>Pollini</b>: il pallino prende il polline messo peggio tra graminacee, betulla, ontano, olivo, artemisia e ambrosia (media della giornata, previsione CAMS Europa). Classi della rete italiana POLLnet: <span style="color:#4ADE80">●</span> assenti, <span style="color:#FACC15">●</span> bassi, <span style="color:#FB923C">●</span> medi, <span style="color:#F87171">●</span> alti; grigio = fuori stagione. Tocca il pallino per il dettaglio di ogni polline. Cipresso, nocciolo, ortica e altri non sono previsti: per quelli c'è il bollettino ARPA.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Quando da Intervals arriva l'attività vera, il diario mostra quella (nome, sport, durata, livello) con accanto la proposta di SMG. Tocca un giorno passato per vedere cosa hai fatto e la seduta proposta, o per segnarla.</li>
