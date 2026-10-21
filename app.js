@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.10';
+const APP_V = '1.11';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -98,7 +98,7 @@ function wxFor(d) { return S.wx && S.wx.days && S.wx.days[d] || null; }
 async function fetchWeather(force) {
   if (!S.loc) return false;
   // si riscarica se i dati sono vecchi o se mancano campi aggiunti in una versione nuova (es. punto di rugiada)
-  if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()] && S.wx.days[today()].hd) return false;
+  if (!force && S.wx && Date.now() - S.wx.at < 2 * 3600e3 && S.wx.days[today()] && S.wx.days[today()].hd && 'pol' in S.wx.days[today()]) return false;
   const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon +
     '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset&hourly=precipitation_probability,temperature_2m,dew_point_2m&timezone=auto&forecast_days=3';
   try {
@@ -115,6 +115,21 @@ async function fetchWeather(force) {
       for (let h = 7; h <= 16; h++) { const v = Math.max(pr[h] || 0, pr[h + 1] || 0, pr[h + 2] || 0); if (best == null || v < best.v) best = { h, v }; }
       if (best) days[d].win = best;
     });
+    // pollini (CAMS Europa via Open-Meteo): media giornaliera per tipo, in granuli/m³
+    try {
+      const pr = await fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' + S.loc.lat + '&longitude=' + S.loc.lon + '&hourly=' + POL_KEYS.map(k => k + '_pollen').join(',') + '&timezone=auto&forecast_days=3');
+      if (!pr.ok) throw 0; const pj = await pr.json();
+      Object.keys(days).forEach(d => {
+        const pol = {}; let any = false;
+        POL_KEYS.forEach(k => {
+          const arr = (pj.hourly && pj.hourly[k + '_pollen']) || [], v = [];
+          pj.hourly.time.forEach((h, i) => { if (h.slice(0, 10) === d && arr[i] != null && !isNaN(arr[i])) v.push(+arr[i]); });
+          pol[k] = v.length ? { avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10, max: Math.round(Math.max(...v) * 10) / 10 } : null;
+          if (pol[k]) any = true;
+        });
+        days[d].pol = any ? pol : null;
+      });
+    } catch (e) { Object.keys(days).forEach(d => { days[d].pol = null; days[d].polErr = true; }); }
     S.wx = { at: Date.now(), days }; save(); return true;
   } catch (e) { return false; }
 }
@@ -743,23 +758,72 @@ const wind = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const sunIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M17 18a5 5 0 0 0-10 0M12 9V2M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M16 5l-4 4-4-4"/></svg>';
 // punto di rugiada nelle ore in cui esci: verde fino a 16°, giallo 17-18°, rosso 19-21°, viola da 22°
 const DEW_C = v => v <= 16 ? '#4ADE80' : v <= 18 ? '#FACC15' : v <= 21 ? '#F87171' : '#C084FC';
+function outHours(d) {
+  const at = E.startMin(S.profile, d), cfg = E.dayCfg(S, d);
+  return [Math.floor(at / 60), Math.min(23, Math.floor((at + Math.min(cfg.max || 60, 120)) / 60))];
+}
 function dewAt(d, w) {
   if (!w || !w.hd) return null;
-  const at = E.startMin(S.profile, d), cfg = E.dayCfg(S, d), h0 = Math.floor(at / 60), h1 = Math.min(23, Math.floor((at + Math.min(cfg.max || 60, 120)) / 60));
+  const [h0, h1] = outHours(d);
   let v = null; for (let h = h0; h <= h1; h++) if (w.hd[h] != null) v = v == null ? w.hd[h] : Math.max(v, w.hd[h]);
-  return v == null ? null : { v, h: h0 };
+  return v == null ? null : { v, h0, h1 };
 }
 function dewHTML(d, w) {
   const x = dewAt(d, w); if (!x) return '';
-  return '<span class="dew" title="Punto di rugiada alle ' + x.h + '"><i style="background:' + DEW_C(x.v) + '"></i>Rugiada ' + x.v + '°</span>';
+  return '<span class="dew tap" data-tip="dew|' + d + '"><i style="background:' + DEW_C(x.v) + '"></i>Rugiada ' + x.v + '°</span>';
 }
+// pollini: classi della rete POLLnet (ISPRA/ARPA), granuli/m³ come media giornaliera
+// [nome, soglie: fino a a = assente, fino a b = bassa, fino a c = media, oltre = alta]
+const POL_KEYS = ['grass', 'birch', 'alder', 'olive', 'mugwort', 'ragweed'];
+const POL = { grass: ['Graminacee', [0.5, 10, 30]], birch: ['Betulla', [0.5, 16, 50]], alder: ['Ontano', [0.5, 16, 50]],
+  olive: ['Olivo', [0.5, 5, 25]], mugwort: ['Artemisia', [0.1, 5, 25]], ragweed: ['Ambrosia', [0.1, 5, 25]] };
+const POL_C = ['#4ADE80', '#FACC15', '#FB923C', '#F87171'], POL_N = ['assenti', 'bassi', 'medi', 'alti'], POL_N1 = ['Assente', 'Bassa', 'Media', 'Alta'];
+const polClass = (k, v) => v == null ? -1 : v <= POL[k][1][0] ? 0 : v <= POL[k][1][1] ? 1 : v <= POL[k][1][2] ? 2 : 3;
+function polWorst(w) {
+  if (!w || !w.pol) return null;
+  let best = { c: -1, k: null };
+  POL_KEYS.forEach(k => { const x = w.pol[k]; const c = x ? polClass(k, x.avg) : -1; if (c > best.c) best = { c, k }; });
+  return best;
+}
+function polHTML(d, w) {
+  if (!w || !('pol' in w)) return '';
+  const x = polWorst(w);
+  if (!x || x.c < 0) return '<span class="dew tap" data-tip="pol|' + d + '"><i style="background:var(--mut)"></i>Pollini –</span>';
+  return '<span class="dew tap" data-tip="pol|' + d + '"><i style="background:' + POL_C[x.c] + '"></i>Pollini ' + POL_N[x.c] + '</span>';
+}
+function openWxTip(kind, d) {
+  const w = wxFor(d); if (!w) return;
+  const dn = d === today() ? 'oggi' : 'domani';
+  if (kind === 'dew') {
+    const x = dewAt(d, w); if (!x) return;
+    const nowH = new Date().getHours(), now = d === today() && w.hd[nowH] != null ? w.hd[nowH] : null;
+    const row = (h) => '<div class="set"><div class="l"><b>' + String(h).padStart(2, '0') + ':00</b></div><div class="v"><span class="dew"><i style="background:' + DEW_C(w.hd[h]) + '"></i>' + w.hd[h] + '°</span>' + (w.ht && w.ht[h] != null ? ' <small class="mut">aria ' + w.ht[h] + '°</small>' : '') + '</div></div>';
+    const hs = []; for (let h = x.h0; h <= x.h1; h++) if (w.hd[h] != null) hs.push(h);
+    openSheet('<div class="guide"><h2>Punto di rugiada</h2><p class="intro">Il valore sul pallino è il <b>massimo nelle ore in cui esci ' + dn + '</b> (dalle ' + x.h0 + ' alle ' + (x.h1 + 1) + ', secondo l\'orario della tua settimana), non quello di adesso: per questo può essere diverso da altre app.' +
+      (now != null ? ' Adesso (ore ' + nowH + ') è <b>' + now + '°</b>.' : '') + '</p>' + hs.map(row).join('') +
+      '<p class="mut" style="font-size:13px;margin-top:10px">Fonte: Open-Meteo, modello migliore per la tua zona, valori orari arrotondati al grado. Tra modelli diversi (quelli delle altre app) 1–2 gradi di differenza sono normali. ' +
+      '<span style="color:#4ADE80">●</span> fino a 16° · <span style="color:#FACC15">●</span> 17–18° · <span style="color:#F87171">●</span> 19–21° · <span style="color:#C084FC">●</span> da 22°.</p><button class="btn full" id="tipOk">Chiudi</button></div>', () => { document.getElementById('tipOk').onclick = () => closeSheet(); });
+    return;
+  }
+  const rows = POL_KEYS.map(k => {
+    const x = w.pol && w.pol[k], c = x ? polClass(k, x.avg) : -1, t = POL[k][1];
+    return '<div class="set"><div class="l"><b>' + POL[k][0] + '</b><small>bassa fino a ' + String(t[1]).replace('.', ',') + ', media fino a ' + t[2] + ', alta oltre</small></div><div class="v"><span class="dew"><i style="background:' + (c < 0 ? 'var(--mut)' : POL_C[c]) + '"></i>' +
+      (c < 0 ? 'fuori stagione' : POL_N1[c] + ' · ' + String(x.avg).replace('.', ',')) + '</span>' + (x && c >= 0 ? '<small class="mut" style="display:block;text-align:right">picco ' + String(x.max).replace('.', ',') + '</small>' : '') + '</div></div>';
+  }).join('');
+  const x = polWorst(w);
+  openSheet('<div class="guide"><h2>Pollini ' + dn + '</h2><p class="intro">' + (w.polErr ? 'Previsione dei pollini non scaricata: SMG riprova da sola entro un paio d\'ore.' : !x || x.c < 0 ? 'Nessuno dei sei pollini previsti è in stagione: il servizio dà valori solo nei mesi di fioritura.' :
+      'Il pallino prende il polline messo peggio: <b>' + POL[x.k][0].toLowerCase() + ' ' + POL_N1[x.c].toLowerCase() + '</b>.') + ' Valori in granuli per m³ d\'aria, media della giornata (picco = ora peggiore).</p>' + rows +
+    '<p class="mut" style="font-size:13px;margin-top:10px">Fonte: previsione CAMS Europa (Copernicus) via Open-Meteo, griglia di 11 km, 4 giorni. Classi della rete italiana POLLnet (ISPRA/ARPA): <span style="color:#4ADE80">●</span> assente, <span style="color:#FACC15">●</span> bassa, <span style="color:#FB923C">●</span> media, <span style="color:#F87171">●</span> alta. Indicano quanti pollini ci sono, non il rischio di allergia, che dipende dalla persona. ' +
+    'Non sono previsti cipresso, nocciolo, carpino, ortica, castagno e altri: per quelli guarda il bollettino dell\'ARPA della tua regione.</p><button class="btn full" id="tipOk">Chiudi</button></div>', () => { document.getElementById('tipOk').onclick = () => closeSheet(); });
+}
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-tip]'); if (b) { e.preventDefault(); const [k, d] = b.dataset.tip.split('|'); openWxTip(k, d); } });
 function wxDayHTML(d, label, cls) {
   const w = wxFor(d);
   if (!w) return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="desc" style="margin-top:10px">Previsioni non disponibili</div></div>';
   return '<div class="wxd ' + cls + '"><div class="dn">' + label + '</div><div class="main">' + wxIcon(w.code) +
     '<div><div class="tmax num">' + Math.round(w.tmax) + '°</div><div class="tmin num">' + Math.round(w.tmin) + '°</div></div></div>' +
     '<div class="desc">' + WXD(w.code) + '</div><div class="meta"><span style="color:' + (w.rain >= 50 ? 'var(--hot2)' : 'inherit') + '">' + drop + w.rain + '%' + (w.mm >= 0.5 ? ' · ' + Math.round(w.mm) + ' mm' : '') + '</span>' +
-    '<span>' + wind + Math.round(w.wind) + ' km/h</span>' + dewHTML(d, w) + (w.sunset ? '<span title="Tramonto">' + sunIco + w.sunset.slice(11, 16) + '</span>' : '') + '</div></div>';
+    '<span>' + wind + Math.round(w.wind) + ' km/h</span>' + dewHTML(d, w) + polHTML(d, w) + (w.sunset ? '<span title="Tramonto">' + sunIco + w.sunset.slice(11, 16) + '</span>' : '') + '</div></div>';
 }
 // seduta probabile di domani: stessa logica della proposta, come se oggi facessi la seduta prevista
 function tomorrowPreview(d) {
@@ -1291,7 +1355,8 @@ const GUIDE = [
     <p>Il <b>lunedì</b> (e il martedì, finché non lo chiudi) in cima a Oggi trovi il riepilogo della settimana appena chiusa: sedute, tempo, sedute dure, variazione della fitness e cosa ti aspetta.</p>`],
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
-    <li><b>Punto di rugiada</b> (nelle ore in cui esci): dice quanto è afosa l'aria, cioè quanto fatichi a smaltire il calore. <span style="color:#4ADE80">●</span> fino a 16° confortevole, <span style="color:#FACC15">●</span> 17–18° si sente, <span style="color:#F87171">●</span> 19–21° pesante: rallenta il ritmo e bevi di più, <span style="color:#C084FC">●</span> da 22° molto pesante: solo sedute facili o rulli con ventilatore. Conta soprattutto per la corsa.</li>
+    <li><b>Punto di rugiada</b> (nelle ore in cui esci): dice quanto è afosa l'aria, cioè quanto fatichi a smaltire il calore. <span style="color:#4ADE80">●</span> fino a 16° confortevole, <span style="color:#FACC15">●</span> 17–18° si sente, <span style="color:#F87171">●</span> 19–21° pesante: rallenta il ritmo e bevi di più, <span style="color:#C084FC">●</span> da 22° molto pesante: solo sedute facili o rulli con ventilatore. Conta soprattutto per la corsa. Il valore è il <b>massimo nelle ore in cui esci</b>, non quello di adesso: tocca il pallino per vedere ora per ora e il valore attuale.</li>
+    <li><b>Pollini</b>: il pallino prende il polline messo peggio tra graminacee, betulla, ontano, olivo, artemisia e ambrosia (media della giornata, previsione CAMS Europa). Classi della rete italiana POLLnet: <span style="color:#4ADE80">●</span> assenti, <span style="color:#FACC15">●</span> bassi, <span style="color:#FB923C">●</span> medi, <span style="color:#F87171">●</span> alti; grigio = fuori stagione. Tocca il pallino per il dettaglio di ogni polline. Cipresso, nocciolo, ortica e altri non sono previsti: per quelli c'è il bollettino ARPA.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Quando da Intervals arriva l'attività vera, il diario mostra quella (nome, sport, durata, livello) con accanto la proposta di SMG. Tocca un giorno passato per vedere cosa hai fatto e la seduta proposta, o per segnarla.</li>
     <li><b>Dettaglio dell'attività</b>: tocca un'attività (in Oggi o nel giorno del diario) per vedere tutte le statistiche registrate: tempo, distanza, dislivello, velocità, potenza media e normalizzata, intensità, carico, FC media e massima, cadenza, calorie, efficienza, deriva cardiaca, sforzo percepito; poi i grafici di potenza, FC, altitudine e cadenza e il tempo nelle zone. I dati arrivano da Intervals.icu al momento, quindi serve la connessione; in fondo c'è il collegamento per aprirla su Intervals.</li>

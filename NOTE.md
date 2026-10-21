@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 21 ottobre 2026 · versione app **1.10** · cache service worker `smg-org-v47`
+Aggiornate al 21 ottobre 2026 · versione app **1.11** · cache service worker `smg-org-v48`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -36,6 +36,8 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - **Inverno (ottobre–marzo)**: qualità sui rulli (massimo 70'), volume fuori, MTB preferita.
 - **Orario di uscita per giorno** (Profilo → La tua settimana): lunedì e mercoledì 18:00, venerdì 15:00, sabato e domenica 9:00. Pioggia, temperatura e punto di rugiada si guardano nelle ore di uscita. Col buio niente strada; MTB con le luci solo ogni tanto, con tempo asciutto, poco vento e almeno 5 °C. Avviso "porta le luci" se si rientra dopo il tramonto.
 - **Punto di rugiada** nella scheda meteo, con pallino colorato: verde fino a 16°, giallo 17–18°, rosso 19–21°, viola da 22°. Da 19° la proposta aggiunge un consiglio (corsa e sedute medie o dure all'aperto).
+- **Punto di rugiada, come si legge** (verificato il 21 ottobre): il pallino mostra il **massimo nelle ore di uscita** del giorno (dall'orario della settimana per min(durata massima, 120') ), non il valore attuale: per questo può differire dalle altre app, insieme al modello meteo (Open-Meteo "best match"; 1–2° tra modelli sono normali). Toccando il pallino si vedono i valori ora per ora e quello di adesso. Il calcolo è corretto: nessun errore trovato.
+- **Pollini** (dalla v1.11): pallino col colore del polline messo peggio. Dati: Open-Meteo Air Quality (CAMS Europa, 11 km, 4 giorni, solo in stagione), 6 tipi: graminacee, betulla, ontano, olivo, artemisia, ambrosia; media giornaliera in granuli/m³ (`wx.days[d].pol`, con `avg` e `max`). Classi POLLnet (ISPRA/ARPA): betulla e ontano 0,5/16/50; graminacee 0,5/10/30; olivo 0,5/5/25; artemisia e ambrosia 0,1/5/25 (assente/bassa/media/alta). Colori: verde, giallo, arancione, rosso; grigio = fuori stagione. Toccando il pallino: dettaglio per tipo con media, picco e soglie. Non coperti: cipresso, nocciolo, carpino, ortica, castagno (bollettino ARPA). Non cambia la scelta della seduta.
 - **Test FTP 20'** (`ftp_test`):
   - Proposto nella prima settimana dopo lo scarico se sono passate almeno 6 settimane; oltre 9 settimane anche in altre settimane, mai durante lo scarico.
   - Solo con semaforo verde, di lunedì, mercoledì o sabato. "Anticipa" lo chiede al primo giorno utile.
