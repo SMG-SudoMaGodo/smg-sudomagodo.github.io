@@ -85,6 +85,9 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - Pubblicare a piccoli passi e verificare il deploy di GitHub Actions. GitHub Pages tiene i file in cache per circa 10 minuti, quindi gli aggiornamenti arrivano con qualche minuto di ritardo. Il 5 ottobre un guasto di GitHub ha bloccato una pubblicazione e l'ho dovuta rilanciare.
 - Prova delle modifiche con Playwright (Chromium già installato) e dati di Intervals e Open-Meteo simulati.
 
+**Durate**
+- Salite in tempo con 60' disponibili dura 65': va bene così (deciso il 21 ottobre), non correggere.
+
 **Varietà (decisa il 21 ottobre)**
 - Fabrizio non vuole annoiarsi, ma la varietà dev'essere sempre al servizio del miglioramento e degli stimoli allenanti: le alternative restano allo stesso livello, ogni seduta dice cosa allena, la progressione resta quella dei blocchi.
 - Varietà anche nella corsa, per quando riprende dopo la fascite.
