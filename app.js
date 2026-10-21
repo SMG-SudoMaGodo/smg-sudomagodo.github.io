@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.16';
+const APP_V = '1.17';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -456,13 +456,13 @@ function workoutHTML(p, ro) {
     if (p.status === 'planned') {
       const dayCfg = E.dayCfg(S, p.date);
       const maxD = Math.min(p.opts && p.opts.extra ? 60 : (dayCfg.max || 75), p.sport === 'indoor' ? (S.profile.indoorMax || 70) : 999);
-      const sports = ['indoor', 'mtb', 'road', 'run'].filter(s => S.profile.sports[s]);
+      const sports = ['indoor', 'mtb', 'road', 'run'].filter(s => E.profileFor(S, p.date).sports[s]);
       const fs = p.opts && p.opts.forceSport, fd = p.opts && p.opts.forceDur;
       h += '<div class="ctl"><div class="lab">Sport</div><div class="chips"><button class="chip' + (!fs ? ' on' : '') + '" data-sport="">Automatico</button>' +
         sports.map(s => '<button class="chip' + (fs === s ? ' on' : '') + '" data-sport="' + s + '">' + E.SPORTS[s].name + '</button>').join('') + '</div>' +
         '<div class="lab">Tempo a disposizione</div><div class="chips"><button class="chip' + (!fd ? ' on' : '') + '" data-dur="">Automatico</button>' +
         [30, 45, 60, 75, 90, 105, 120, 150].filter(m => m <= maxD).map(m => '<button class="chip' + (fd === m ? ' on' : '') + '" data-dur="' + m + '">' + fmtMin(m) + '</button>').join('') + '</div></div>';
-      const iv = p.sport !== 'indoor' && p.sport !== 'run' && S.profile.sports.indoor ? E.indoorVersion(p, S.profile, S) : null;
+      const iv = p.sport !== 'indoor' && p.sport !== 'run' && E.profileFor(S, p.date).sports.indoor ? E.indoorVersion(p, S.profile, S) : null;
       h += '<div class="actions">' +
         (iv ? '<button class="btn wide" id="aIndoor"><span style="color:var(--indoor);display:flex">' + ico('indoor') + '</span>' + 'Falla sui rulli</button>' : '') +
         '<button class="btn" id="aReroll">' + ico('dice') + 'Alternative</button>' +
@@ -770,6 +770,7 @@ async function openActSheet(id) {
 }
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-act]'); if (b) { e.preventDefault(); openActSheet(b.dataset.act); } });
 function restHTML(p) {
+  if (p.tripRest) return '<div class="card rest"><div class="big">🧳</div><h2>Giornata libera</h2><p>In trasferta senza bici né corsa: goditi il posto, una camminata vale. ' + (S.profile.sports.strength ? 'Se ti va, qui sotto c\'è una sessione breve di forza e mobilità a corpo libero.' : '') + ' Se trovi una bici, cambia <b>Cosa hai con te</b> nel Profilo.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
   if (p.illRest) return '<div class="card rest"><div class="big">🤒</div><h2>Riposa e guarisci</h2><p>Con febbre o dolori diffusi allenarsi fa solo danni. Bevi, dormi, e quando stai meglio segnalo nel check-in: SMG ti farà rientrare con calma.</p></div>';
   if (p.special === 'off') return '<div class="card rest"><div class="big">📅</div><h2>Oggi hai un impegno</h2><p>Giorno segnato come impegnato. Se poi trovi un buco, puoi comunque muoverti.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aExtraDay">Ho trovato un buco</button><button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
   const red = p.redRest;
@@ -993,7 +994,7 @@ function planLine(d) {
 function weatherHTML(d) {
   const t = E.addDays(d, 1);
   if (!S.loc && !S.trip) return '<div class="card wxc"><div class="empty">' + ico('pin') + '<div style="flex:1">Imposta la località per vedere il meteo di oggi e domani</div><button class="btn sm" id="wxSet">Imposta</button></div>' + planLine(d) + '</div>';
-  const tl = S.trip && S.trip.to >= d ? '<div class="trip">' + ico('pin') + '<span>' + (onTrip(d) ? 'In trasferta a <b>' + esc(S.trip.name) + '</b> fino a ' + longDate(S.trip.to).toLowerCase() : 'Trasferta a <b>' + esc(S.trip.name) + '</b> da ' + longDate(S.trip.from).toLowerCase()) + '</span></div>' : '';
+  const tl = S.trip && S.trip.to >= d ? '<div class="trip">' + ico('pin') + '<span>' + (onTrip(d) ? 'In trasferta a <b>' + esc(S.trip.name) + '</b> fino a ' + longDate(S.trip.to).toLowerCase() + (S.trip.gear ? ' · con te: ' + (gearList(S.trip).length ? gearList(S.trip).map(x => GEAR_N[x].toLowerCase()).join(', ') : 'niente bici') : '') : 'Trasferta a <b>' + esc(S.trip.name) + '</b> da ' + longDate(S.trip.from).toLowerCase()) + '</span></div>' : '';
   return '<div class="card wxc">' + tl + '<div class="days">' + wxDayHTML(d, 'Oggi', '') + wxDayHTML(t, 'Domani, ' + GG[E.parse(t).getDay()], 'tmw') + '</div>' + planLine(d) + '</div>';
 }
 
@@ -1495,7 +1496,7 @@ const GUIDE = [
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>
     <ul><li><b>Meteo delle tue ore</b>: SMG guarda pioggia e temperatura nelle ore in cui esci di solito (Profilo → La tua settimana), non della giornata intera. Se piove al mattino ma alle 18 è asciutto, si può uscire.</li>
     <li><b>Punto di rugiada</b> (nelle ore in cui esci): dice quanto è afosa l'aria, cioè quanto fatichi a smaltire il calore. <span style="color:#4ADE80">●</span> fino a 16° confortevole, <span style="color:#FACC15">●</span> 17–18° si sente, <span style="color:#F87171">●</span> 19–21° pesante: rallenta il ritmo e bevi di più, <span style="color:#C084FC">●</span> da 22° molto pesante: solo sedute facili o rulli con ventilatore. Conta soprattutto per la corsa. Il valore è il <b>massimo nelle ore in cui esci</b>, non quello di adesso: tocca il pallino per vedere ora per ora e il valore attuale.</li>
-    <li><b>Trasferta</b> (Profilo → Meteo): in ferie o in viaggio indichi la località e le date. In quei giorni meteo, luce (alba e tramonto) e proposte usano quella località; sopra il meteo vedi dove sei e fino a quando. Il giorno dopo la fine torna da sola quella di casa; <b>Sono tornato</b> la chiude prima.</li>
+    <li><b>Trasferta</b> (Profilo → Meteo): in ferie o in viaggio indichi la località e le date. In quei giorni meteo, luce (alba e tramonto) e proposte usano quella località. In <b>Cosa hai con te</b> scegli rulli, MTB, bici da strada e corsa: SMG propone solo quello che hai (all'inizio i rulli sono spenti); senza rulli, con pioggia o buio te lo segnala e decidi tu. Senza niente è una giornata libera, con forza e mobilità a corpo libero. sopra il meteo vedi dove sei e fino a quando. Il giorno dopo la fine torna da sola quella di casa; <b>Sono tornato</b> la chiude prima.</li>
     <li><b>Previsioni dettagliate</b>: tocca il riquadro di oggi o di domani. Si apre la schermata con i grafici ora per ora di temperatura e punto di rugiada, probabilità di pioggia, millimetri previsti ora per ora (con il totale) e vento con raffiche, più la striscia ora per ora. In azzurro le ore in cui esci, in scuro le ore di buio; tocca o scorri un grafico per leggere i valori di quell'ora. In alto scegli oggi, domani o dopodomani e vedi l'ora dell'ultimo aggiornamento: SMG riscarica il meteo quando apri l'app, se è passata più di un'ora (i pollini cambiano una volta al giorno).</li>
     <li><b>Pollini</b>: il pallino prende il polline messo peggio tra graminacee, betulla, ontano, olivo, artemisia e ambrosia (media della giornata, previsione CAMS Europa). Classi della rete italiana POLLnet: <span style="color:#4ADE80">●</span> assenti, <span style="color:#FACC15">●</span> bassi, <span style="color:#FB923C">●</span> medi, <span style="color:#F87171">●</span> alti; grigio = fuori stagione. Tocca il pallino per il dettaglio di ogni polline. Cipresso, nocciolo, ortica e altri non sono previsti: per quelli c'è il bollettino ARPA.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
@@ -1550,7 +1551,7 @@ const FEEL = [
 const FREE_NAME = { mtb: 'Giro in MTB con gli amici', road: 'Uscita in bici con gli amici', run: 'Corsa con gli amici', indoor: 'Uscita di gruppo su MyWhoosh' };
 function openFriendsSheet(d) {
   const p = S.plans[d] || { date: d }; const base = p.free ? p.orig : p;
-  const sports = ['mtb', 'road', 'run', 'indoor'].filter(x => S.profile.sports[x]);
+  const sports = ['mtb', 'road', 'run', 'indoor'].filter(x => S.profile.sports[x]);   // con gli amici anche in trasferta: magari la bici te la prestano
   let sp = p.free ? p.sport : (sports.includes('mtb') ? 'mtb' : sports[0]);
   let dur = p.free ? p.dur : (base && !base.rest && base.dur ? Math.max(60, base.dur) : 120);
   let fe = p.free ? p.freeFeel : 'mix';
@@ -1818,24 +1819,27 @@ function openTestSheet(d) {
     });
 }
 // trasferta (ferie, viaggio): località temporanea con date di inizio e fine
+const GEAR_N = { indoor: 'Rulli', mtb: 'MTB / Gravel', road: 'Bici da strada', run: 'Corsa' };
+const gearList = T => ['indoor', 'mtb', 'road', 'run'].filter(x => S.profile.sports[x] && (!T.gear || T.gear[x]));
 let tripEdit = null;   // bozza mentre la imposti: { name, lat, lon, from, to }
 function tripHTML() {
   const T = S.trip;
   let h = '<div class="tripbox"><div class="set"><div class="l"><b>Trasferta</b><small>' +
     (T ? (onTrip(today()) ? 'Ora sei a <b style="color:var(--text)">' + esc(T.name) + '</b> fino a ' + longDate(T.to).toLowerCase() : 'A <b style="color:var(--text)">' + esc(T.name) + '</b> da ' + longDate(T.from).toLowerCase() + ' a ' + longDate(T.to).toLowerCase()) +
-      '. In quei giorni meteo, luce e proposte usano questa località; poi si torna da sola a casa.' : 'In ferie o in viaggio? Indica dove sei e fino a quando: in quei giorni il meteo è di lì, poi torna da solo quello di casa.') + '</small></div>' +
+      '. Con te: ' + (gearList(T).length ? gearList(T).map(x => GEAR_N[x].toLowerCase()).join(', ') : 'niente bici né corsa (solo forza e mobilità)') + '. Poi si torna da sola a casa.' : 'In ferie o in viaggio? Indica dove sei e fino a quando: in quei giorni il meteo è di lì, poi torna da solo quello di casa.') + '</small></div>' +
     (T && !tripEdit ? '<button class="btn sm" id="tEnd">' + (onTrip(today()) ? 'Sono tornato' : 'Annulla') + '</button>' : '') + '</div>';
   if (!tripEdit) return h + '<button class="btn sm full" id="tNew" style="margin-top:6px">' + ico('pin') + (T ? 'Modifica la trasferta' : 'Sono in trasferta') + '</button></div>';
   const e = tripEdit;
   return h + '<div class="row" style="margin-top:6px"><input id="tQ" placeholder="Dove sei? Cerca un comune…" value="' + esc(e.q || '') + '"><button class="btn" id="tFind" style="flex:none">Cerca</button></div><div class="results" id="tRes"></div>' +
     (e.name ? '<div class="src" style="margin:8px 0 0">' + ico('pin') + esc(e.name) + '</div>' : '') +
+    '<div class="lab" style="margin-top:10px;font-size:12px;color:var(--mut);font-weight:600">Cosa hai con te</div><div class="chips" style="flex-wrap:wrap">' + ['indoor', 'mtb', 'road', 'run'].filter(x => S.profile.sports[x]).map(x => '<button class="chip' + (e.gear[x] ? ' on' : '') + '" data-gear="' + x + '">' + GEAR_N[x] + '</button>').join('') + '</div>' +
     '<div class="row" style="margin-top:8px"><div class="field"><label>Dal</label><input type="date" id="tFrom" value="' + e.from + '"></div><div class="field"><label>Al (compreso)</label><input type="date" id="tTo" value="' + e.to + '"></div></div>' +
     '<div class="row" style="margin-top:8px"><button class="btn" id="tCancel">Annulla</button><button class="btn hot" id="tSave"' + (e.name ? '' : ' disabled') + '>Salva</button></div></div>';
 }
 function bindTrip() {
   const g = id => document.getElementById(id);
   const after = async (msg) => { save(); render(); toast(msg); await fetchWeather(true); refreshToday(!(S.plans[today()] || {}).lightUsed); render(); };
-  if (g('tNew')) g('tNew').onclick = () => { tripEdit = S.trip ? Object.assign({}, S.trip) : { from: today(), to: E.addDays(today(), 6) }; render(); setTimeout(() => { const q = g('tQ'); if (q && !tripEdit.name) q.focus(); }, 50); };
+  if (g('tNew')) g('tNew').onclick = () => { tripEdit = S.trip ? Object.assign({}, S.trip, { gear: Object.assign({ indoor: true, mtb: true, road: true, run: true }, S.trip.gear) }) : { from: today(), to: E.addDays(today(), 6), gear: { indoor: false, mtb: true, road: true, run: true } }; render(); setTimeout(() => { const q = g('tQ'); if (q && !tripEdit.name) q.focus(); }, 50); };
   if (g('tEnd')) g('tEnd').onclick = () => { const back = onTrip(today()); delete S.trip; after(back ? 'Bentornato: meteo di nuovo di casa' : 'Trasferta annullata'); };
   if (!tripEdit) return;
   const keep = () => { tripEdit.q = g('tQ').value; tripEdit.from = g('tFrom').value || tripEdit.from; tripEdit.to = g('tTo').value || tripEdit.to; };
@@ -1848,13 +1852,14 @@ function bindTrip() {
     } catch (e) { toast('Ricerca non riuscita'); }
   };
   g('tFind').onclick = find; g('tQ').onkeydown = e => { if (e.key === 'Enter') find(); };
+  document.querySelectorAll('[data-gear]').forEach(b => b.onclick = () => { keep(); tripEdit.gear[b.dataset.gear] = !tripEdit.gear[b.dataset.gear]; render(); });
   g('tCancel').onclick = () => { tripEdit = null; render(); };
   g('tSave').onclick = () => {
     keep(); const e = tripEdit;
     if (!e.name) { toast('Scegli prima la località'); return; }
     if (!e.from || !e.to || e.to < e.from) { toast('Controlla le date: la fine viene dopo l\'inizio'); return; }
     if (e.to < today()) { toast('La trasferta è già finita'); return; }
-    S.trip = { name: e.name, lat: e.lat, lon: e.lon, from: e.from, to: e.to }; tripEdit = null;
+    S.trip = { name: e.name, lat: e.lat, lon: e.lon, from: e.from, to: e.to, gear: Object.assign({}, e.gear) }; tripEdit = null;
     after(onTrip(today()) ? 'Meteo di ' + S.trip.name + ' fino a ' + longDate(S.trip.to).toLowerCase() : 'Trasferta salvata: da ' + longDate(S.trip.from).toLowerCase() + ' meteo di ' + S.trip.name);
   };
 }

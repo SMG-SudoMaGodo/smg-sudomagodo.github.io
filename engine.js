@@ -744,6 +744,14 @@ function nextTest(profile, date) {
 /* Scelta della seduta                                                 */
 /* ------------------------------------------------------------------ */
 function sportAllowed(profile, s) { return !!profile.sports[s]; }
+// in trasferta valgono solo gli sport per cui hai l'attrezzatura con te (state.trip.gear)
+function profileFor(state, date) {
+  const P = state.profile, T = state.trip;
+  if (!T || !T.gear || T.lat == null || date < T.from || date > T.to) return P;
+  const sports = Object.assign({}, P.sports);
+  ['indoor', 'mtb', 'road', 'run'].forEach(x => { sports[x] = !!(P.sports[x] && T.gear[x]); });
+  return Object.assign({}, P, { sports, onTrip: true });
+}
 // impostazione del giorno: settimana tipo, oppure eccezione per quella data (state.special)
 function dayCfg(state, date) {
   const base = state.profile.days[dow(date)] || { on: false, max: 60 };
@@ -839,7 +847,7 @@ function weatherBad(w, slot) {
  */
 function propose(state, date, opts) {
   opts = opts || {};
-  const P = state.profile; const w = dow(date);
+  const P = profileFor(state, date); const w = dow(date);
   const cfg = dayCfg(state, date);
   if (!cfg.on && !opts.extra) return { date, rest: true, special: cfg.special, reasons: [cfg.special === 'off' ? 'Oggi hai segnato un impegno: niente allenamento' : 'Oggi è giorno di riposo'] };
   const ci = state.checkins[date] || {};
@@ -979,7 +987,8 @@ function propose(state, date, opts) {
     });
     tpl = pickWeighted(r, weights); sport = sp; level = lv;
   }
-  if (!tpl) return { date, rest: true, reasons: ['Nessuna seduta adatta con gli sport attivi'] };
+  if (!tpl) return P.onTrip ? { date, rest: true, tripRest: true, reasons: ['In trasferta senza bici né corsa: giornata libera'], extra: P.sports.strength ? EXTRAS[Math.floor(r() * EXTRAS.length)].id : null }
+    : { date, rest: true, reasons: ['Nessuna seduta adatta con gli sport attivi'] };
 
   /* --- durata --- */
   let [lo, hi] = tpl.test ? [tpl.dur[0], Math.min(tpl.dur[1], dayMax)] : durRange(tpl, sport, dayLong, dayMax, light, level, P);
@@ -1007,6 +1016,7 @@ function propose(state, date, opts) {
   if (slot && slot.dew != null && slot.dew >= 19 && (sport === 'run' || (sport !== 'indoor' && level >= 3)))
     reasons.push(slot.dew >= 22 ? 'Punto di rugiada ' + slot.dew + '°: aria molto afosa, ritmo più lento del solito e tanta acqua' : 'Punto di rugiada ' + slot.dew + '°: aria afosa, rallenta un po\' e bevi di più');
   if (dark && sport === 'run') reasons.push('Col buio: frontale o luce e qualcosa di riflettente');
+  if (P.onTrip && !P.sports.indoor && sport !== 'indoor' && (bad >= 1 || dark)) reasons.push('In trasferta senza rulli: ' + (bad >= 1 ? 'con questo meteo' : 'col buio') + ' valuta tu se uscire, o fai forza e mobilità');
   if (tpl.test) reasons.push(P.testSoon ? 'Test FTP chiesto da te: oggi sei fresco, aggiorniamo le zone' : blockWeek(P, date) === 0 ? 'Prima settimana dopo lo scarico: sei fresco, aggiorniamo le zone' : 'Sono passate più di 9 settimane dall\'ultimo test: aggiorniamo le zone');
   if (level >= 4 && ctx.weekHard === 0) reasons.push('Prima seduta intensa della settimana');
   if (dayLong && level === 2) reasons.push('Giorno lungo: accumula ore di fondo');
@@ -1034,7 +1044,7 @@ function propose(state, date, opts) {
  */
 function alternatives(state, date, plan, opts, seed) {
   opts = Object.assign({}, opts || {}); delete opts.forceTid; delete opts.picked; opts.reroll = 0;
-  const P = state.profile, cfg = dayCfg(state, date);
+  const P = profileFor(state, date), cfg = dayCfg(state, date);
   const dayLong = !!cfg.long && !opts.extra;
   const ref = propose(state, date, opts);
   if (!plan || plan.rest || ref.rest) return [];
@@ -1238,7 +1248,7 @@ function activityLevel(a, P) {
 root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
-  defaultProfile, readiness, propose, alternatives, FOCUS_INFO, indoorVersion, build, stats, profileBars, targetText,
+  defaultProfile, profileFor, readiness, propose, alternatives, FOCUS_INFO, indoorVersion, build, stats, profileBars, targetText,
   toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
 };
 })(typeof window !== 'undefined' ? window : globalThis);
