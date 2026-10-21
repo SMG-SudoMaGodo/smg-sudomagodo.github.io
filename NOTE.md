@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 21 ottobre 2026 · versione app **1.18** · cache service worker `smg-org-v55`
+Aggiornate al 21 ottobre 2026 · versione app **1.19** · cache service worker `smg-org-v56`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -70,7 +70,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - Corsa in pausa per la fascite (al 19 ottobre non permette ancora il rientro). Quando riprende, rientro graduale con le fasi già previste (cammino e corsa → corsa facile → completa).
 
 **Rulli e potenza**
-- **Cadenza su MyWhoosh** (21 ottobre): non ancora verificata su questo setup. A fine 2025 sul forum di Intervals c'erano segnalazioni contrastanti (rpm non arrivati ad agosto 2025, funzionanti a dicembre 2025, con valori singoli). Dalla v1.10 SMG invia la cadenza come valore singolo arrotondato a 5 (es. `55rpm`), non più come fascia (`50-60rpm`). Da verificare alla prima seduta con cadenza (SFR, Giochi di cadenza, Piramide di cadenza).
+- **Cadenza su MyWhoosh** (21 ottobre): non ancora verificata su questo setup. A fine 2025 sul forum di Intervals c'erano segnalazioni contrastanti (rpm non arrivati ad agosto 2025, funzionanti a dicembre 2025, con valori singoli). Dalla v1.10 SMG invia la cadenza come valore singolo arrotondato a 5 (es. `55rpm`), non più come fascia (`50-60rpm`). **Verificato il 21 ottobre (SFR)**: il valore singolo arriva sia su MyWhoosh sia sul Fenix (55 rpm). Fabrizio fatica a scendere sotto i 60 col rapporto più duro (in ERG basta pedalare più piano). Dalla v1.19 interruttore Profilo → **Cadenza come fascia** (`profile.cadRange`, spento di base): manda `50-60rpm` invece di `55rpm`; prova da fare alla prossima seduta con cadenza per vedere cosa mostrano MyWhoosh e il Fenix. Deciso di NON cambiare la fascia SFR (50–60).
 - Su MyWhoosh il Tacx Flux 2S è l'unico misuratore e comanda l'ERG. Gli Stages (pedivella sulla bici da strada) restano solo sul Fenix, che registra la stessa seduta.
 - Sul Fenix il Tacx non va abbinato come rullo né come potenza; come solo sensore di velocità via ANT+ va bene.
 - Sul Fenix si può avviare anche la seduta SMG, partendo insieme a MyWhoosh e con gli avvisi di obiettivo spenti.
@@ -116,7 +116,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 1. **Verifiche alle prossime sedute indoor**
    - Controllare che la seduta SMG arrivi su MyWhoosh nonostante il permesso "Attività" tolto, e che su Intervals arrivi solo l'attività del Fenix.
    - Controllare se sforzo percepito e sensazione inseriti su Garmin compaiono nell'attività su Intervals (ora si vedono nel dettaglio attività di SMG). Se non compaiono, inserirli su Intervals.
-   - Alla prima seduta con cadenza (SFR, Giochi di cadenza, Piramide di cadenza): su MyWhoosh compare l'obiettivo in rpm? E sul Fenix?
+   - Cadenza: il valore singolo arriva su MyWhoosh e Fenix (21 ottobre). Prossima seduta con cadenza: accendere "Cadenza come fascia" e vedere se MyWhoosh e Fenix mostrano la fascia; se no, spegnerla.
    - Dopo la calibrazione di Stages e Tacx, rifare il confronto (Profilo → Tacx e Stages → Rifai) e impostare su MyWhoosh l'FTP indicata.
 2. **FTP**: rifare il test a breve (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. Primo test con la lettura automatica: verificare che i 20' trovati coincidano col Lap del Fenix e che MyWhoosh spenga davvero l'ERG al blocco Test.
 3. **26 ottobre: analisi del backup.** Esportare il backup da SMG e caricarlo in chat per tarare semaforo, livelli MTB senza potenza, progressione e frequenza del test. Poi impostare i **temi dei blocchi** (vedi Varietà) e rivedere pesi e progressione delle sedute nuove.

@@ -1183,14 +1183,14 @@ function icuTarget(z, sport) {
 }
 function cleanTxt(t) { return (t || '').replace(/[0-9%\-]/g, '').replace(/\s+/g, ' ').trim(); }
 
-function toIcu(plan, sections) {
+function toIcu(plan, sections, profile) {
   const lines = [];
   sections.forEach(s => {
     lines.push(s.rep > 1 ? cleanTxt(s.title) + ' ' + s.rep + 'x' : cleanTxt(s.title));
     s.steps.forEach(x => {
       let l = '- ' + (x.txt ? cleanTxt(x.txt) + ' ' : '') + icuDur(x.d) + ' ' + (x.free && plan.sport === 'indoor' ? 'freeride' : icuTarget(x.z, plan.sport));
-      // cadenza come valore singolo (centro della fascia): è il formato che MyWhoosh legge (come nei file .zwo)
-      if (x.cad && SPORTS[plan.sport].target === 'power') l += ' ' + Math.round((x.cad[0] + x.cad[1]) / 10) * 5 + 'rpm';
+      // cadenza: di base valore singolo (centro della fascia, arrotondato a 5); con profile.cadRange la fascia intera (prova)
+      if (x.cad && SPORTS[plan.sport].target === 'power') l += ' ' + (profile && profile.cadRange ? x.cad[0] + '-' + x.cad[1] : Math.round((x.cad[0] + x.cad[1]) / 10) * 5) + 'rpm';
       lines.push(l);
     });
     lines.push('');
@@ -1201,7 +1201,7 @@ function toIcu(plan, sections) {
 function icuEvent(plan, profile) {
   const t = TEMPLATES[plan.tid];
   const sections = build(plan, profile);
-  let desc = t.desc + (t.setup && t.setup[plan.sport] ? '\n\n' + t.setup[plan.sport].map(x => '• ' + x).join('\n') : '') + (plan.challenge ? '\n\nSfida: ' + plan.challenge : '') + '\n\n' + toIcu(plan, sections);
+  let desc = t.desc + (t.setup && t.setup[plan.sport] ? '\n\n' + t.setup[plan.sport].map(x => '• ' + x).join('\n') : '') + (plan.challenge ? '\n\nSfida: ' + plan.challenge : '') + '\n\n' + toIcu(plan, sections, profile);
   return {
     category: 'WORKOUT',
     start_date_local: plan.date + 'T00:00:00',
