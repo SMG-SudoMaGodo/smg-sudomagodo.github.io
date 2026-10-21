@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.14';
+const APP_V = '1.15';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -853,7 +853,9 @@ function wxChart(id, title, legend, series, opt) {
   return '<div class="wxch"><div class="sh"><b>' + title + '</b>' + (legend || '') + '</div><svg id="' + id + '" viewBox="0 0 ' + W + ' ' + H + '" data-l="' + L + '" data-pw="' + pw + '" data-mn="' + mn + '" data-mx="' + mx + '" data-t="' + T + '" data-ph="' + ph + '">' + g + '</svg></div>';
 }
 const legItem = (c, t, dash) => '<span class="lg"><i style="background:' + (dash ? 'repeating-linear-gradient(90deg,' + c + ' 0 4px,transparent 4px 7px)' : c) + '"></i>' + t + '</span>';
-function openWxSheet(d) {
+function openWxSheet(d, inPlace) {
+  // cambio giorno: si aggiorna solo il contenuto della scheda già aperta (niente chiudi e riapri)
+  const put = (html, bind) => { if (inPlace && sheetOpen()) { $('#sheetBody').innerHTML = html; if (bind) bind(); } else openSheet(html, bind); };
   const keys = Object.keys((S.wx && S.wx.days) || {}).filter(k => k >= today()).sort().slice(0, 3);
   if (!keys.length) return;
   if (!keys.includes(d)) d = keys[0];
@@ -863,8 +865,8 @@ function openWxSheet(d) {
   const hm = (t) => t ? t.slice(11, 16) : '–';
   const tabs = '<div class="chips" style="margin:2px 0 12px">' + keys.map(k => '<button class="chip' + (k === d ? ' on' : '') + '" data-wxd="' + k + '">' + name(k) + '</button>').join('') + '</div>';
   if (!w.hw) {
-    openSheet('<div class="guide"><h2>Meteo</h2>' + tabs + '<p class="intro">Sto scaricando le previsioni ora per ora: riapri tra un attimo.</p></div>', bindTabs);
-    fetchWeather(true).then(ok => { if (ok) { render(); if (sheetOpen()) { closeSheet(); setTimeout(() => openWxSheet(d), 80); } } });
+    put('<div class="guide"><h2>Meteo</h2>' + tabs + '<p class="intro">Sto scaricando le previsioni ora per ora: riapri tra un attimo.</p></div>', bindTabs);
+    fetchWeather(true).then(ok => { if (ok) { render(); if (sheetOpen()) openWxSheet(d, true); } });
     return;
   }
   const cfg = E.dayCfg(S, d), [b0, b1] = outHours(d);
@@ -901,7 +903,7 @@ function openWxSheet(d) {
   const strip = '<div class="wxstrip">' + Array.from({ length: 24 - h0 }, (_, i) => h0 + i).map(h => '<div' + (band && h >= band[0] && h <= band[1] ? ' class="on"' : '') + '><small>' + h + ':00</small>' + wxIcon(w.hc[h] != null ? w.hc[h] : w.code) +
     '<b>' + (w.ht[h] != null ? w.ht[h] + '°' : '–') + '</b><small style="color:' + ((w.hp[h] || 0) >= 50 ? 'var(--hot2)' : 'var(--mut)') + '">' + (w.hp[h] || 0) + '%</small></div>').join('') + '</div>';
   const upd = new Date(S.wx.at), updTxt = (E.ymd(upd) === today() ? 'oggi' : 'il ' + upd.getDate() + '/' + (upd.getMonth() + 1)) + ' alle ' + String(upd.getHours()).padStart(2, '0') + ':' + String(upd.getMinutes()).padStart(2, '0');
-  openSheet('<div class="guide wxs"><h2>Meteo · ' + name(d).toLowerCase() + '</h2><p class="mut wxupd" style="font-size:12.5px;margin:-2px 0 8px">' + ico('sync') + ' Aggiornato ' + updTxt + '</p>' + tabs + tiles +
+  put('<div class="guide wxs"><h2>Meteo · ' + name(d).toLowerCase() + '</h2><p class="mut wxupd" style="font-size:12.5px;margin:-2px 0 8px">' + ico('sync') + ' Aggiornato ' + updTxt + '</p>' + tabs + tiles +
     '<div class="wxro" id="wxRo">Tocca o scorri un grafico per leggere i valori ora per ora.' + (band ? ' In azzurro le ore in cui esci.' : '') + '</div>' + chT + chP + chM + chW + strip +
     '<p class="mut" style="font-size:12.5px;margin-top:10px">Fonte: Open-Meteo, modello migliore per la tua località' + (S.loc && S.loc.name ? ' (' + esc(S.loc.name) + ')' : '') + '. Le zone scure sono le ore di buio. SMG riscarica il meteo quando apri l\'app, se è passata più di un\'ora.</p><button class="btn full" id="wxOk">Chiudi</button></div>', () => {
       bindTabs();
@@ -924,7 +926,7 @@ function openWxSheet(d) {
       });
       show(d === today() ? new Date().getHours() : (band ? band[0] : 12));
     });
-  function bindTabs() { document.querySelectorAll('[data-wxd]').forEach(b => b.onclick = () => { const k = b.dataset.wxd; closeSheet(); setTimeout(() => openWxSheet(k), 80); }); }
+  function bindTabs() { document.querySelectorAll('[data-wxd]').forEach(b => b.onclick = () => openWxSheet(b.dataset.wxd, true)); }
 }
 document.addEventListener('click', e => { const t = e.target.closest && e.target.closest('[data-wx]'); if (t && !e.target.closest('[data-tip]')) { e.preventDefault(); openWxSheet(t.dataset.wx); } });
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-tip]'); if (b) { e.preventDefault(); const [k, d] = b.dataset.tip.split('|'); openWxTip(k, d); } });

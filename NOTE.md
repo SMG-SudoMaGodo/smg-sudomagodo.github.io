@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 21 ottobre 2026 · versione app **1.14** · cache service worker `smg-org-v51`
+Aggiornate al 21 ottobre 2026 · versione app **1.15** · cache service worker `smg-org-v52`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
