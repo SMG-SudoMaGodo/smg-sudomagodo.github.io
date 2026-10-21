@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.17';
+const APP_V = '1.18';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -401,8 +401,16 @@ function focusHTML(t) {
   const f = E.FOCUS_INFO[t.focus]; if (!f || t.focus === 'test') return '';
   return '<div class="focus"><span class="tag">' + esc(f[0]) + '</span><span>' + esc(f[1]) + '</span></div>';
 }
+/* Registro delle scelte: quando cambi una proposta (cosa scarti, cosa scegli). Finisce nel backup per capire cosa annoia davvero. */
+function logChoice(act, p, extra) {
+  if (!p) return;
+  const L = S.choices || (S.choices = []);
+  L.push(Object.assign({ d: p.date, t: (n => E.ymd(n) + 'T' + String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'))(new Date()), act, tid: p.tid, sport: p.sport, level: p.level, dur: p.dur, light: p.lightUsed || null, picked: !!(p.opts && p.opts.picked) }, extra || {}));
+  if (L.length > 1500) L.splice(0, L.length - 1500);
+  save();
+}
 // "Alternative": 3 sedute dello stesso livello tra cui scegliere
-function openAltSheet(d, seed) {
+function openAltSheet(d, seed, inPlace) {
   const p = S.plans[d]; if (!p) return;
   const alts = E.alternatives(S, d, p, Object.assign({}, p.opts, { weather: wxFor(d) }), seed);
   const cur = E.TEMPLATES[p.tid];
@@ -412,18 +420,21 @@ function openAltSheet(d, seed) {
       chartSVG(secs) + '<div class="focus"><span class="tag">' + esc(f[0]) + '</span><span>' + esc(f[1]) + '</span></div>' +
       '<p class="mut" style="font-size:13px;margin:6px 2px 8px">' + esc(t.desc) + '</p><button class="btn hot sm full" data-alt="' + i + '">' + ico('check') + 'Scelgo questa</button></div>';
   };
-  openSheet('<div class="guide"><h2>Alternative</h2><p class="intro">Stesso livello di oggi (' + E.LEVELS[p.level].toLowerCase() + '), quindi stesso stimolo e stesse regole di recupero, ma un allenamento diverso. Prima quelle che non fai da un po\'. Ora hai: <b>' + esc(cur.name) + '</b>.</p>' +
+  logChoice('alt_open', p, { round: seed || 0, shown: alts.map(a => a.tid + '/' + a.sport) });
+  const put = (html, bind) => { if (inPlace && sheetOpen()) { $('#sheetBody').innerHTML = html; $('.sheet .pane').scrollTop = 0; bind(); } else openSheet(html, bind); };
+  put('<div class="guide"><h2>Alternative</h2><p class="intro">Stesso livello di oggi (' + E.LEVELS[p.level].toLowerCase() + '), quindi stesso stimolo e stesse regole di recupero, ma un allenamento diverso. Prima quelle che non fai da un po\'. Ora hai: <b>' + esc(cur.name) + '</b>.</p>' +
     (alts.length ? alts.map(card).join('') : '<p class="intro">Oggi non ci sono alternative a questo livello con gli sport attivi.</p>') +
     '<div class="row" style="margin-top:10px"><button class="btn" id="altMore">' + ico('dice') + 'Altre 3</button><button class="btn" id="altKeep">Tengo la mia</button></div></div>', () => {
       document.querySelectorAll('[data-alt]').forEach(b => b.onclick = () => {
         const a = alts[+b.dataset.alt];
+        logChoice('alt_pick', p, { round: seed || 0, to: a.tid, toSport: a.sport, shown: alts.map(x => x.tid + '/' + x.sport) });
         closeSheet();
         setOpts(o => { o.forceSport = a.sport; o.forceTid = a.tid; o.picked = true; o.exclude = []; });
         toast(E.TEMPLATES[a.tid].name + ': è la seduta di oggi');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       });
-      document.getElementById('altMore').onclick = () => { $('#sheetBody').scrollTop = 0; closeSheet(); setTimeout(() => openAltSheet(d, (seed || 0) + 1), 60); };
-      document.getElementById('altKeep').onclick = () => closeSheet();
+      document.getElementById('altMore').onclick = () => openAltSheet(d, (seed || 0) + 1, true);
+      document.getElementById('altKeep').onclick = () => { logChoice('alt_keep', p, { round: seed || 0 }); closeSheet(); };
     });
 }
 function workoutHTML(p, ro) {
@@ -1123,10 +1134,11 @@ function bindOggi(p) {
   });
   on('ciEdit', () => { editCI = true; history.pushState({ view: 'oggi', edit: 1 }, ''); render(); });
   on('ciCancel', () => { leaveEdit(); render(); });
-  document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts(o => { o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.picked = undefined; o.reroll = 0; o.exclude = []; }));
-  document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => setOpts(o => { o.forceDur = b.dataset.dur ? +b.dataset.dur : undefined; }));
+  document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts((o, pp) => { logChoice('sport', pp, { to: b.dataset.sport || 'auto' }); o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.picked = undefined; o.reroll = 0; o.exclude = []; }));
+  document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => setOpts((o, pp) => { logChoice('dur', pp, { to: b.dataset.dur ? +b.dataset.dur : 'auto' }); o.forceDur = b.dataset.dur ? +b.dataset.dur : undefined; }));
   on('aIndoor', () => {
     const pp = S.plans[d]; const iv = E.indoorVersion(pp, S.profile, S); if (!iv) return;
+    logChoice('indoor', pp, { to: iv.tid });
     const from = E.TEMPLATES[pp.tid].name;
     setOpts(o => { o.forceSport = 'indoor'; o.forceTid = iv.tid; o.forceDur = iv.dur; o.picked = undefined; o.exclude = []; });
     toast(iv.same ? from + ': versione rulli pronta' : from + ' → ' + iv.name + ' sui rulli');
@@ -1139,7 +1151,7 @@ function bindOggi(p) {
   on('aTestRes', () => openTestSheet(d));
   on('aTestHow', () => openTestHowSheet(S.plans[d]));
   on('aSkip', () => {
-    const x = S.plans[d]; x.status = 'skipped'; delete x.altExtra;
+    const x = S.plans[d]; logChoice('skip', x); x.status = 'skipped'; delete x.altExtra;
     if (x.pushed) { x.pushed = false; icuDelete(d); }
     save(); render(); openSkipSheet(d);
   });
@@ -1470,7 +1482,8 @@ const GUIDE = [
     <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>
     <p><b>Malanno</b> (nel check-in): con raffreddore o mal di gola solo sedute facili e più corte; con febbre o dolori diffusi riposo. Segnalo ogni giorno finché dura: dopo, 2-3 giorni di rientro graduale prima della qualità.</p>
     <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati. In <b>Come è calcolato il punteggio</b> trovi il contributo di ogni voce.</p>`],
-  ['bolt', 'La seduta del giorno', `<ul><li><b>Alternative</b>: se la seduta non ti ispira, ti propone 3 sedute dello <b>stesso livello</b> (stesso stimolo e stesse regole di recupero) tra cui scegliere, con il grafico, la durata e cosa allenano. Prima quelle che non fai da un po' e con stimoli diversi tra loro; gli sport seguono meteo, luce e stagione (in inverno la qualità resta sui rulli). <b>Altre 3</b> ne mostra altre; <b>Automatico</b> nella riga Sport torna alla proposta di SMG.</li>
+  ['bolt', 'La seduta del giorno', `<ul><li><b>Registro delle scelte</b>: SMG annota quando cambi una proposta (Alternative aperte, scelte o rifiutate, sport o durata cambiati, rulli, "Oggi salto", uscita con gli amici). Resta nel telefono e finisce nel backup: serve a capire quali sedute ti annoiano davvero.</li>
+    <li><b>Alternative</b>: se la seduta non ti ispira, ti propone 3 sedute dello <b>stesso livello</b> (stesso stimolo e stesse regole di recupero) tra cui scegliere, con il grafico, la durata e cosa allenano. Prima quelle che non fai da un po' e con stimoli diversi tra loro; gli sport seguono meteo, luce e stagione (in inverno la qualità resta sui rulli). <b>Altre 3</b> ne mostra altre; <b>Automatico</b> nella riga Sport torna alla proposta di SMG.</li>
     <li>Sotto la descrizione l'etichetta dice <b>cosa allena</b> la seduta (fondo, tecnica, tempo, sweet spot, forza, soglia, VO2max…).</li>
     <li>Tocca il <b>grafico della seduta</b> per aprire o chiudere il dettaglio dei blocchi.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
@@ -1575,6 +1588,7 @@ function openFriendsSheet(d) {
           lightUsed: rd ? rd.light : 'free', light: rd ? rd.light : null, score: rd ? rd.score : null, v: ENGINE_V, opts: {},
           reasons: ['Uscita scelta da te: ' + f[2].toLowerCase()], orig: base && !base.free ? JSON.parse(JSON.stringify(base)) : (p.orig || null),
           pushed: !!(p && p.pushed), pushedSig: null };
+        logChoice('friends', base && !base.rest ? base : { date: d }, { to: sp, feel: fe });
         S.plans[d] = np; save(); syncPushState(np); closeSheet(); toast('Buona uscita!'); render();
       };
     });
