@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.19';
+const APP_V = '1.20';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1369,7 +1369,7 @@ function renderProfilo() {
     '<div class="set" style="margin-top:6px;border-top:1px solid var(--line)"><div class="l"><b>Massimo sui rulli</b><small>Vale per tutte le sedute indoor</small></div><div class="v"><select id="pIndoorMax">' +
     [45, 60, 70, 75, 90, 105, 120].map(m => '<option value="' + m + '"' + ((P.indoorMax || 70) === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div></div>' +
     '<div class="set"><div class="l"><b>Tacx e Stages</b><small>' + esc(tacxText(P.ftp) || 'Confronta una volta i watt medi di una seduta su MyWhoosh e sul Fenix') + '</small></div><button class="btn sm" id="pTacx">' + (P.tacx ? 'Rifai' : 'Confronta') + '</button></div>' +
-    '<div class="set"><div class="l"><b>Cadenza come fascia</b><small>' + (P.cadRange ? 'Prova in corso: a MyWhoosh e Garmin arriva la fascia (es. 50–60 rpm). Se non la mostrano bene, spegni e torna il valore centrale.' : 'Spento: arriva il valore centrale della fascia (es. 55 rpm). Accendi per provare a mandare la fascia intera (es. 50–60 rpm).') + '</small></div>' + sw('pCadR', !!P.cadRange) + '</div></div>';
+    '<div class="set"><div class="l"><b>Cadenza come fascia</b><small>' + (P.cadRange ? 'Acceso: la fascia (es. 50–60 rpm) la mostra solo il Fenix; MyWhoosh non la legge e resta senza obiettivo di cadenza.' : 'Spento: a MyWhoosh e al Fenix arriva il valore centrale (es. 55 rpm). Acceso: la fascia intera, ma la legge solo il Fenix, non MyWhoosh.') + '</small></div>' + sw('pCadR', !!P.cadRange) + '</div></div>';
 
   const st = S.icu.ok ? '<div class="status ok"><i></i>Collegato' + (S.icu.name ? ' · ' + esc(S.icu.name) : '') + '</div>' : S.icu.key ? '<div class="status err"><i></i>Non collegato</div>' : '<div class="status"><i></i>Non collegato</div>';
   h += '<div class="card"><h3>Intervals.icu → Garmin e MyWhoosh</h3>' + st +
@@ -1495,7 +1495,7 @@ const GUIDE = [
     <li>Tocca il <b>grafico della seduta</b> per aprire o chiudere il dettaglio dei blocchi.</li>
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta con obiettivi in watt per il Tacx. Se esiste solo all'aperto (fartlek, salite, settori, caccia alle salite…) sceglie tra 2-3 gemelle indoor dello stesso livello e stimolo simile, quella che non fai da più tempo: per esempio il Fartlek collinare diventa Sweet spot con strappi, Tempo a blocchi o Piramide di cadenza. Dopo puoi sempre toccare <b>Alternative</b>.</li>
-    <li><b>Cadenza</b>: nelle sedute con una cadenza da tenere (SFR, giochi e piramide di cadenza, frullini) la cadenza arriva a MyWhoosh e al Fenix come obiettivo in rpm insieme ai watt; in SMG la vedi nel dettaglio della seduta. Di base arriva il valore centrale della fascia (SFR 50–60 → 55 rpm). Con <b>Cadenza come fascia</b> (Profilo, sotto Tacx e Stages) arriva la fascia intera: è una prova, se MyWhoosh o il Fenix non la mostrano bene spegnila. In ERG la cadenza la scegli tu: per andare più piano non serve un rapporto più duro, il Tacx aumenta la resistenza da solo.</li>
+    <li><b>Cadenza</b>: nelle sedute con una cadenza da tenere (SFR, giochi e piramide di cadenza, frullini) la cadenza arriva a MyWhoosh e al Fenix come obiettivo in rpm insieme ai watt; in SMG la vedi nel dettaglio della seduta. Di base arriva il valore centrale della fascia (SFR 50–60 → 55 rpm). Con <b>Cadenza come fascia</b> (Profilo, sotto Tacx e Stages) arriva la fascia intera: il Fenix la mostra, MyWhoosh no (provato il 24 ottobre), quindi di base resta spento. In ERG la cadenza la scegli tu: per andare più piano non serve un rapporto più duro, il Tacx aumenta la resistenza da solo.</li>
     <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola. Con <b>Oggi salto</b> la seduta sparisce anche da Garmin e MyWhoosh, la settimana si riequilibra (una seduta dura saltata può tornare nei giorni dopo) e puoi scegliere un'alternativa breve di mobilità o forza leggera in base al tempo che hai. <b>Annulla</b> la rimette.</li>
     <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li>
     <li><b>Decido io: esco con gli amici</b>: scegli sport, durata e "che aria tira" (tranquilla, mista, garosa). Sul Fenix non arriva nessun allenamento strutturato: registri l'uscita come sempre e SMG, leggendo da Intervals com'è andata davvero, regola i giorni dopo (se è stata dura, il giorno dopo si scarica). Funziona anche nei giorni di riposo. <b>Proposta SMG</b> rimette la seduta originale.</li></ul>
