@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.21';
+const APP_V = '1.22';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -467,7 +467,7 @@ function workoutHTML(p, ro) {
   } else if (!ro) {
     if (p.status === 'planned') {
       const dayCfg = E.dayCfg(S, p.date);
-      const maxD = Math.min(p.opts && p.opts.extra ? 60 : (dayCfg.max || 75), p.sport === 'indoor' ? (S.profile.indoorMax || 70) : 999);
+      const maxD = Math.min(p.opts && p.opts.extra ? 60 : (dayCfg.max || 75), p.sport === 'indoor' ? E.indoorCap(S.profile, p.dayLong) : 999);
       const sports = ['indoor', 'mtb', 'road', 'run'].filter(s => E.profileFor(S, p.date).sports[s]);
       const fs = p.opts && p.opts.forceSport, fd = p.opts && p.opts.forceDur;
       h += '<div class="ctl"><div class="lab">Sport</div><div class="chips"><button class="chip' + (!fs ? ' on' : '') + '" data-sport="">Automatico</button>' +
@@ -632,7 +632,7 @@ function trendHTML(key) {
   const note = key === 'hrv' ? 'La fascia è la tua norma (60 giorni): conta la media dei 7 giorni rispetto alla fascia, non la singola notte.' :
     key === 'rhr' ? 'Più bassa è meglio. Qualche battito sopra la tua media per più giorni è un segnale di stanchezza o malanno.' :
     key === 'tsb' ? 'Fitness meno fatica, da Intervals: sopra lo zero sei fresco, molto sotto hai carico accumulato.' :
-    key === 'garmin' ? 'Il valore del Fenix: se lo inserisci, il semaforo fa la media 50/50 con il punteggio di SMG.' : 'Sotto 65 pesa sul semaforo.';
+    key === 'garmin' ? 'Il valore del Fenix: se lo inserisci, nel semaforo pesa per un quarto (il resto è il punteggio di SMG).' : 'Sotto 65 pesa sul semaforo.';
   return '<div class="guide trend"><h2>' + lab + '</h2>' + chips +
     '<div class="tv" id="tv"><b>' + fmt(v[v.length - 1]) + unit + '</b><span>' + (pts[pts.length - 1][0] === N - 1 ? 'oggi' : dl(pts[pts.length - 1][0])) + '</span></div>' +
     '<svg id="tsvg" viewBox="0 0 ' + W + ' ' + H + '" data-n="' + N + '">' + band + ticks + refl + '<path d="' + line + '" class="ln"/>' + dots + xl + '<line id="tcur" class="cur" y1="' + T + '" y2="' + (H - B) + '" x1="-9" x2="-9"/></svg>' +
@@ -667,9 +667,9 @@ function scoreDetail(rd) {
   const row = (a, b, c, strong) => '<div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--line)' + (strong ? ';font-weight:700;color:var(--text)' : '') + '"><span style="flex:none;min-width:92px;color:var(--text)">' + a + '</span><span style="flex:1;min-width:0">' + b + '</span><b style="flex:none;color:' + (typeof c !== 'number' ? 'var(--text)' : c > 0 ? 'var(--green)' : c < 0 ? 'var(--red)' : 'var(--mut)') + '">' + (typeof c === 'number' ? sg(c) : c) + '</b></div>';
   let h = row('Partenza', '', '70') + rd.parts.map(p => row(esc(p.lab), esc(p.val), p.pts)).join('');
   h += row('Punteggio tuo', 'limitato tra 5 e 100', String(rd.own), true);
-  if (rd.garmin != null) h += row('Training Readiness', 'media 50/50 con il tuo punteggio', String(rd.garmin)) + row('Totale', '(' + rd.own + ' + ' + rd.garmin + ') / 2', String(rd.score), true);
+  if (rd.garmin != null) h += row('Training Readiness', 'pesa per un quarto', String(rd.garmin)) + row('Totale', '¾ × ' + rd.own + ' + ¼ × ' + rd.garmin, String(rd.score), true);
   return '<details class="steps" style="margin-top:12px"><summary>Come è calcolato il punteggio ' + ico('chev') + '</summary><div class="t2" style="font-size:13px">' + h +
-    '<div class="mut" style="font-size:12px;margin-top:6px">Verde da 70, arancione da 50, rosso sotto 50. Vicino a una soglia basta un piccolo cambiamento (per esempio la FC a riposo aggiornata da Garmin in giornata) per cambiare colore.</div></div></details>';
+    '<div class="mut" style="font-size:12px;margin-top:6px">Verde da ' + E.GREEN + ', arancione da 50, rosso sotto 50. Vicino a una soglia basta un piccolo cambiamento (per esempio la FC a riposo aggiornata da Garmin in giornata) per cambiare colore.</div></div></details>';
 }
 function lightHTML(rd) {
   const snap = (S.checkins[today()] || {}).snap;
@@ -1323,11 +1323,22 @@ function diagText() {
   return 'Oggi da Intervals: ' + g.today.map(k => WNAME[k]).join(', ') + '.' + old;
 }
 function diagHTML() { const t = diagText(); return t ? '<div class="help" style="margin-top:8px">' + esc(t) + '</div>' : ''; }
+const THEME_TXT = {
+  forza: 'Più SFR, sweet spot e tempo: forza e resistenza, la base dell\'inverno. Sedute VO2max rare.',
+  soglia: 'Più ripetute alla soglia (classica, lunga, over-under, partenza forte): si alza l\'FTP.',
+  libero: 'Settimane delle feste: nessun accento, varietà e quello che riesci a fare.',
+  soglia_vo2: 'Soglia e VO2max alternati: si costruisce il margine sopra la soglia.',
+  vo2: 'Più VO2max, 30/30, 15/15 e sprint: brillantezza per la primavera.',
+  estate: 'Bella stagione: tutto un po\', più strada e uscite lunghe.'
+};
 function blockCardHTML() {
   const t = today(), mon = E.monday(t), bw = E.blockWeek(S.profile, mon), nd = E.nextDeload(S.profile, t);
   const lab = d => { const a = E.parse(d), b = E.parse(E.addDays(d, 6)); return a.getDate() + (a.getMonth() !== b.getMonth() ? ' ' + MM[a.getMonth()].slice(0, 3) : '') + '–' + b.getDate() + ' ' + MM[b.getMonth()].slice(0, 3); };
   return '<div class="card"><h3>Blocchi e scarico</h3>' +
-    '<div class="set"><div class="l"><b>Questa settimana</b><small>' + (bw === 3 ? 'Scarico: sedute più corte e leggere' : 'Costruzione ' + (bw + 1) + ' di 3') + '</small></div></div>' +
+    (() => { const th = E.blockTheme(S.profile, t), nx = E.blockTheme(S.profile, E.addDays(nd, 7));
+      return '<div class="set"><div class="l"><b>Tema del blocco: ' + esc(th.name) + '</b><small>' + esc(THEME_TXT[th.id]) + '</small></div></div>' +
+        '<div class="set"><div class="l"><b>Questa settimana</b><small>' + (bw === 3 ? 'Scarico: sedute più corte e leggere' : 'Costruzione ' + (bw + 1) + ' di 3') + '</small></div></div>' +
+        (nx.id !== th.id ? '<div class="set"><div class="l"><b>Blocco successivo</b><small>' + esc(nx.name) + ', dal ' + longDate(nx.start).toLowerCase() + '</small></div></div>' : ''); })() +
     '<div class="set"><div class="l"><b>Prossimo scarico</b><small>' + (bw === 3 ? 'in corso, ' + lab(mon) : lab(nd)) + '</small></div></div>' +
     '<div class="mut" style="font-size:12.5px;margin:4px 0 10px">Sposta lo scarico su una settimana di ferie, di lavoro pesante o di trasferta. Vale dalla prossima proposta; quella di oggi resta.</div>' +
     '<div class="row"><button class="btn sm" id="blkEarly">Anticipa</button><button class="btn sm" id="blkLate">Posticipa</button><button class="btn sm" id="blkNow"' + (bw === 3 ? ' disabled style="opacity:.4"' : '') + '>Da questa settimana</button></div></div>';
@@ -1367,8 +1378,10 @@ function renderProfilo() {
       '<select id="d_max_' + g + '"' + (c.on ? '' : ' class="off"') + '>' + [45, 60, 75, 90, 105, 120, 150, 180].map(m => '<option value="' + m + '"' + (c.max === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select>' +
       '<select id="d_at_' + g + '"' + (c.on ? '' : ' class="off"') + '>' + AT_OPTS.map(a => '<option' + ((c.at || E.DEF_AT[g]) === a ? ' selected' : '') + '>' + a + '</option>').join('') + '</select></div>';
   }).join('') + '<div class="mut" style="font-size:12.5px;margin-top:8px">Tipo, durata massima e ora in cui esci di solito. Con l\'ora SMG sa se fuori sarà già buio e guarda il meteo di quelle ore. Ogni quarta settimana è di scarico.</div>' +
-    '<div class="set" style="margin-top:6px;border-top:1px solid var(--line)"><div class="l"><b>Massimo sui rulli</b><small>Vale per tutte le sedute indoor</small></div><div class="v"><select id="pIndoorMax">' +
+    '<div class="set" style="margin-top:6px;border-top:1px solid var(--line)"><div class="l"><b>Massimo sui rulli</b><small>Nei giorni normali</small></div><div class="v"><select id="pIndoorMax">' +
     [45, 60, 70, 75, 90, 105, 120].map(m => '<option value="' + m + '"' + ((P.indoorMax || 70) === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div></div>' +
+    '<div class="set"><div class="l"><b>Massimo sui rulli nei giorni lunghi</b><small>Quando piove o è buio nei giorni lunghi: sedute medie varie, non fondo</small></div><div class="v"><select id="pIndoorMaxL">' +
+    [70, 75, 90, 105, 120].map(m => '<option value="' + m + '"' + ((P.indoorMaxLong || 90) === m ? ' selected' : '') + '>' + fmtMin(m) + '</option>').join('') + '</select></div></div>' +
     '<div class="set"><div class="l"><b>Tacx e Stages</b><small>' + esc(tacxText(P.ftp) || 'Confronta una volta i watt medi di una seduta su MyWhoosh e sul Fenix') + '</small></div><button class="btn sm" id="pTacx">' + (P.tacx ? 'Rifai' : 'Confronta') + '</button></div>' +
     '<div class="set"><div class="l"><b>Cadenza come fascia</b><small>' + (P.cadRange ? 'Acceso: la fascia (es. 50–60 rpm) la mostra solo il Fenix; MyWhoosh non la legge e resta senza obiettivo di cadenza.' : 'Spento: a MyWhoosh e al Fenix arriva il valore centrale (es. 55 rpm). Acceso: la fascia intera, ma la legge solo il Fenix, non MyWhoosh.') + '</small></div>' + sw('pCadR', !!P.cadRange) + '</div></div>';
 
@@ -1435,6 +1448,7 @@ function bindProfilo() {
   g('lHere').onclick = locate;
   g('pTacx').onclick = () => openTacxSheet();
   g('pIndoorMax').onchange = e => { P.indoorMax = +e.target.value; P.indoorMaxSet = true; changed(); };
+  g('pIndoorMaxL').onchange = e => { P.indoorMaxLong = +e.target.value; changed(); };
   g('guideOpen').onclick = openGuide;
   g('spAdd').onclick = () => openSpecialSheet();
   document.querySelectorAll('[data-spedit]').forEach(b => b.onclick = () => openSpecialSheet(b.dataset.spedit));
@@ -1486,7 +1500,7 @@ const GUIDE = [
     <li><b>FC a riposo</b>: più bassa è meglio. Qualche battito sopra il solito è un segnale di stanchezza o di malanno in arrivo.</li>
     <li><b>Sonno</b>: il punteggio del Fenix; sotto 65 pesa sul semaforo.</li>
     <li><b>Forma</b>: fitness meno fatica, da Intervals. La linea tratteggiata è lo zero: sopra sei fresco, molto sotto hai carico accumulato.</li>
-    <li><b>Training Readiness</b> (facoltativa): il valore della mattina che vedi sul Fenix. Se la inserisci nel check-in, il semaforo fa la media 50/50 tra il punteggio di SMG e il suo.</li></ul>
+    <li><b>Training Readiness</b> (facoltativa): il valore della mattina che vedi sul Fenix. Se la inserisci nel check-in, nel semaforo pesa per un quarto e il punteggio di SMG per tre quarti. Fino al 25 ottobre pesava la metà: tende a essere più severa, e il carico recente lo conta già la Forma, così finiva per contare due volte.</li></ul>
     <p><b>Modifica</b> riapre il check-in per correggere sensazione o valori; Indietro lo richiude senza cambiare nulla.</p>
     <p><b>Malanno</b> (nel check-in): con raffreddore o mal di gola solo sedute facili e più corte; con febbre o dolori diffusi riposo. Segnalo ogni giorno finché dura: dopo, 2-3 giorni di rientro graduale prima della qualità.</p>
     <p>Il semaforo segue i dati più recenti: Garmin aggiorna alcuni valori durante la giornata (per esempio la FC a riposo) e Intervals ricalcola la Forma quando arrivano attività. Se il punteggio cambia dopo il check-in, sotto il semaforo vedi il valore del check-in e quali dati sono cambiati. In <b>Come è calcolato il punteggio</b> trovi il contributo di ogni voce.</p>`],
@@ -1508,6 +1522,9 @@ const GUIDE = [
     <li>Sport, da ottobre a marzo: <b>qualità sui rulli</b> (sedute dure a potenza, in ERG) e <b>volume fuori</b> (fondo e lunghi in MTB/gravel, rulli solo se piove). Da aprile a settembre più spazio alla strada e meno ai rulli.</li>
     <li>Sui rulli al massimo 70 minuti (si cambia nel Profilo, sotto "La tua settimana").</li>
     <li>Evita le sedute fatte di recente e lo sport di ieri.</li>
+    <li><b>Temi dei blocchi</b>: ogni blocco di 4 settimane ha un tema che rende più frequenti certe sedute, senza cambiare le regole di recupero. Fine ottobre–novembre <b>forza e sweet spot</b>; fine novembre–dicembre <b>soglia</b>; le feste <b>varietà</b>; gennaio–febbraio <b>soglia e VO2max</b>; febbraio–marzo <b>VO2max e brillantezza</b>; poi <b>bella stagione</b>. Il tema lo decide la data d'inizio del blocco, quindi segue gli spostamenti dello scarico. Lo vedi nel Profilo (Blocchi e scarico) e tra i motivi della seduta.</li>
+    <li><b>Rulli nei giorni lunghi</b>: se piove o è buio, sui rulli si arriva fino a 1h30 (si cambia nel Profilo), con sedute medie varie invece del fondo.</li>
+    <li><b>Uscite lunghissime</b>: un'uscita con carico alto (Intervals 100 o più) conta come seduta media, da 140 come dura, anche se l'andatura era tranquilla: il giorno dopo si recupera.</li>
     <li><b>Test FTP</b>: lo propone nella prima settimana dopo lo scarico, quando sei fresco, se sono passate almeno 6 settimane dall'ultimo (oltre 9 settimane anche in altre settimane, mai durante lo scarico). Solo con semaforo verde, di lunedì, mercoledì o sabato, sui rulli o con la bici da strada: sempre con gli <b>Stages</b>. Sui rulli il Tacx resta la sorgente primaria di MyWhoosh: i 20 minuti arrivano senza ERG (se non si spegne da solo, spegnilo tu) e fai fede ai watt degli Stages sul Fenix. Il giorno del test, sotto la seduta, <b>Istruzioni passo passo</b> spiega tutto: preparazione, partenza di Fenix e MyWhoosh, ritmo minuto per minuto (calcolato dall'FTP che ti aspetti) e cosa fare dopo. <b>Alternative</b> ti fa scegliere un'altra seduta dura (il test torna nei giorni successivi).</li>
     <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
     <p>Le etichette sotto la seduta spiegano il perché della scelta. Nelle sedute oltre 90 minuti (75 di corsa) trovi anche le indicazioni di <b>rifornimento</b>, adattate al meteo.</p>`],

@@ -596,6 +596,7 @@ function hrvStatus(checkins, date) {
            dip: today != null && today < mean - 2 * sd, days: base.length };
 }
 
+const TR_W = 0.25, GREEN = 68;   // tarati sul backup del 25 ottobre
 function readiness(checkins, date) {
   const c = checkins[date];
   if (!c || !c.feel) return null;
@@ -654,10 +655,10 @@ function readiness(checkins, date) {
   if (c.ill === 'body') { add('Malanno', 'febbre o dolori diffusi', -35); why.push('febbre o malessere'); }
   s = clamp(Math.round(s), 5, 100);
   const own = s;
-  if (c.garmin) {                                   // Training Readiness, se inserita: media 50/50
-    s = Math.round((s + clamp(+c.garmin, 0, 100)) / 2);
+  if (c.garmin) {                                   // Training Readiness, se inserita: pesa il 25% (dal 25/10: col 50% il carico contava due volte)
+    s = Math.round(s * (1 - TR_W) + clamp(+c.garmin, 0, 100) * TR_W);
   }
-  const light = s >= 70 ? 'green' : s >= 50 ? 'yellow' : 'red';
+  const light = s >= GREEN ? 'green' : s >= 50 ? 'yellow' : 'red';
   return { score: s, light, why, parts, own, garmin: c.garmin ? +c.garmin : null };
 }
 
@@ -730,6 +731,27 @@ function nextDeload(profile, date) {
   return null;
 }
 
+// Temi dei blocchi: il tema dipende dalla data d'inizio del blocco (lunedì della prima settimana di costruzione)
+// e pesa la scelta delle sedute per "cosa allenano" (focus). Non obbliga: le regole di recupero restano quelle.
+const THEMES = {
+  forza:      { name: 'Forza e sweet spot', short: 'forza e sweet spot', w: { forza: 4, ss: 2.5, tempo: 1.1, soglia: 0.8, vo2: 0.5, sprint: 0.7 }, lv: { 3: 3, 4: 0.5, 5: 0.15 } },
+  soglia:     { name: 'Soglia', short: 'soglia', w: { soglia: 2.5, ss: 1.4, tempo: 1, forza: 1, vo2: 0.7 }, lv: { 3: 0.9, 4: 1.7, 5: 0.5 } },
+  libero:     { name: 'Varietà delle feste', short: 'varietà', w: {}, lv: {} },
+  soglia_vo2: { name: 'Soglia e VO2max', short: 'soglia e VO2max', w: { soglia: 1.8, vo2: 1.8, ss: 1 }, lv: { 4: 1.3, 5: 1.3 } },
+  vo2:        { name: 'VO2max e brillantezza', short: 'VO2max', w: { vo2: 2.5, sprint: 1.5, brio: 1.5, soglia: 1.2 }, lv: { 4: 0.8, 5: 1.7 } },
+  estate:     { name: 'Bella stagione', short: 'bella stagione', w: {}, lv: {} }
+};
+function blockStart(profile, date) {
+  const m = monday(date), bw = blockWeek(profile, m);
+  return addDays(m, -7 * (bw === 3 ? 3 : bw));
+}
+function blockTheme(profile, date) {
+  const st = blockStart(profile, date), md = +st.slice(5, 7) * 100 + +st.slice(8, 10);
+  const id = md >= 1015 && md <= 1115 ? 'forza' : md >= 1116 && md <= 1215 ? 'soglia' : md >= 1216 || md <= 112 ? 'libero'
+    : md <= 209 ? 'soglia_vo2' : md <= 309 ? 'vo2' : 'estate';
+  return Object.assign({ id, start: st }, THEMES[id]);
+}
+
 // settimana (lunedì) in cui SMG proporrà il prossimo test FTP
 function nextTest(profile, date) {
   if (profile.testSoon) return monday(date);
@@ -745,6 +767,8 @@ function nextTest(profile, date) {
 /* Scelta della seduta                                                 */
 /* ------------------------------------------------------------------ */
 function sportAllowed(profile, s) { return !!profile.sports[s]; }
+// massimo sui rulli: nei giorni lunghi si può salire (di base 90')
+function indoorCap(profile, dayLong) { const a = (profile && profile.indoorMax) || 70; return dayLong ? Math.max(a, (profile && profile.indoorMaxLong) || 90) : a; }
 // in trasferta valgono solo gli sport per cui hai l'attrezzatura con te (state.trip.gear)
 function profileFor(state, date) {
   const P = state.profile, T = state.trip;
@@ -764,7 +788,7 @@ function dayCfg(state, date) {
 function templateOk(t, sport, profile, dayLong) {
   if (t.manual) return false;
   if (!t.sports.includes(sport)) return false;
-  if (sport === 'indoor' && t.dur[0] > (profile.indoorMax || 70)) return false;
+  if (sport === 'indoor' && t.dur[0] > indoorCap(profile, dayLong)) return false;
   if (t.long && !dayLong) return false;
   if (sport === 'run') {
     const stg = profile.runStage || 1;
@@ -790,7 +814,7 @@ function durRange(t, sport, dayLong, dayMax, light, level, profile) {
     else if (level === 3) { lo = 90; hi = dayMax - 10; }
     else { lo = 75; hi = 105; }
   }
-  if (sport === 'indoor') hi = Math.min(hi, profile.indoorMax || 70);
+  if (sport === 'indoor') hi = Math.min(hi, indoorCap(profile, dayLong));
   hi = Math.min(hi, t.dur[1], dayMax); lo = Math.max(lo, t.dur[0]);
   if (lo > hi) lo = hi;
   return [lo, hi];
@@ -900,7 +924,9 @@ function propose(state, date, opts) {
   else if (w === 6) dist = (hardLeft > 0 && ctx.blockHard === 0) ? [[2, 0.1], [3, 0.3], [4, 0.35], [5, 0.25]] : [[2, 0.65], [3, 0.35]];
   else if (w === 0) dist = (hardLeft > 0 && ctx.blockHard === 0) ? [[2, 0.55], [3, 0.25], [4, 0.2]] : [[2, 0.7], [3, 0.3]];
   else dist = dayLong ? [[2, 0.6], [3, 0.4]] : [[2, 0.5], [3, 0.3], [4, 0.2]];
-  let level = Math.min(pickWeighted(r, dist), maxL);
+  const theme = blockTheme(P, date);
+  // il tema sposta anche i livelli (es. blocco forza: più sedute medie, meno VO2max)
+  let level = Math.min(pickWeighted(r, dist.map(([l, w]) => [l, w * (theme.lv[l] || 1)])), maxL);
 
   /* --- test FTP --- */
   // proposto nella prima settimana dopo lo scarico, se sono passate almeno 6 settimane (oltre 9 settimane anche dopo);
@@ -923,6 +949,9 @@ function propose(state, date, opts) {
   const dusk = !!sun && !dark && at + estDur > sun.set + 20;
   const coldSlot = slot && slot.temp != null ? slot.temp : wx && wx.tmax != null ? wx.tmax - 3 : null;
 
+  // giorno lungo ma fuori non si va (pioggia o buio): sui rulli niente fondo, una seduta media varia
+  if (dayLong && level <= 2 && maxL >= 3 && (bad === 2 || dark) && sportAllowed(P, 'indoor') && !opts.forceSport && !opts.extra) { level = 3; reasons.push('Giorno lungo ma fuori non si esce: sui rulli una seduta media invece del fondo'); }
+
   /* --- sport --- */
   const m = month(date); const winter = m >= 10 || m <= 3;
   const cand = ['indoor', 'mtb', 'road', 'run'].filter(s => sportAllowed(P, s));
@@ -941,7 +970,7 @@ function propose(state, date, opts) {
       if (dayLong && s === 'indoor') x *= 0.45;
     }
     if (s !== 'indoor' && s !== 'run') { if (bad === 2) x *= 0.03; else if (bad === 1) x *= 0.45; }
-    if (s === 'indoor' && opts.forceDur && opts.forceDur > (P.indoorMax || 70)) x *= 0.1;   // più tempo del massimo sui rulli: meglio fuori
+    if (s === 'indoor' && opts.forceDur && opts.forceDur > indoorCap(P, dayLong)) x *= 0.1;   // più tempo del massimo sui rulli: meglio fuori
     if (s === 'run' && bad === 2) x *= 0.5;
     if (wx && wx.wind >= 40 && s === 'road') x *= 0.5;
     // col buio: strada quasi mai; MTB con le luci ogni tanto, solo se asciutto e non troppo freddo
@@ -984,6 +1013,7 @@ function propose(state, date, opts) {
       if (last != null) x *= last <= 3 ? 0.05 : last <= 7 ? 0.25 : last <= 14 ? 0.6 : 1;
       if (t.test) x *= 20;
       if (t.long && dayLong) x *= 1.3;
+      x *= theme.w[t.focus] || 1;
       return [t, x];
     });
     tpl = pickWeighted(r, weights); sport = sp; level = lv;
@@ -999,13 +1029,13 @@ function propose(state, date, opts) {
   step = clamp(step, 0, 3);
   const pos = between(r, step * 0.2, Math.min(1, 0.55 + step * 0.15));
   let dur = round5(lo + (hi - lo) * pos);
-  if (!deload && bw > 0 && !tpl.test) reasons.push('Settimana ' + (bw + 1) + ' di 3 del blocco: un gradino in più');
+  if (!deload && !tpl.test) reasons.push('Blocco ' + theme.short + ': settimana ' + (bw + 1) + ' di 3' + (bw > 0 ? ', un gradino in più' : ''));
   if (fb.easy && !deload) reasons.push('Le ultime sedute ti sono sembrate facili: alziamo un po\' l\'asticella');
   if (fb.tired) dur = round5(Math.max(tpl.dur[0], dur * 0.9));
   if (ci.ill === 'neck') dur = round5(Math.max(tpl.dur[0], dur * 0.8));
   if (deload) dur = round5(Math.max(tpl.dur[0], dur * 0.75));
   if (opts.forceTid && tpl.id === opts.forceTid) reasons.push(opts.picked ? 'Scelta da te tra le alternative' : 'Versione rulli della seduta di oggi');
-  if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.min(Math.max(opts.forceDur, 30), P.indoorMax || 70) : opts.forceDur));
+  if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.min(Math.max(opts.forceDur, 30), indoorCap(P, dayLong)) : opts.forceDur));
 
   /* --- motivi e sfida --- */
   const atTxt = slot ? ' alle ' + hhmm(at) : '';
@@ -1035,7 +1065,7 @@ function propose(state, date, opts) {
   if (P.sports.strength && level <= 2 && !dayLong) extra = EXTRAS[Math.floor(r() * EXTRAS.length)].id;
 
   const sportW = Object.fromEntries(cand.map(x => [x, sportWeight(x)]));
-  return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload, step, at: hhmm(at), dark, dusk: !!sun && !dark && at + dur > sun.set + 10, sportW };
+  return { date, tid: tpl.id, sport, level, dur, light, score: rd ? rd.score : null, reasons, challenge, extra, rest: false, dayLong, deload, step, at: hhmm(at), dark, dusk: !!sun && !dark && at + dur > sun.set + 10, sportW, theme: theme.id };
 }
 
 /**
@@ -1051,7 +1081,7 @@ function alternatives(state, date, plan, opts, seed) {
   if (!plan || plan.rest || ref.rest) return [];
   const W = ref.sportW || {}; const maxW = Math.max(0.0001, ...Object.values(W));
   const sports = opts.forceSport ? [opts.forceSport] : Object.keys(W).filter(x => W[x] >= maxW * 0.12 || x === plan.sport);
-  const ctx = context(state, date, opts.assumeDone);
+  const ctx = context(state, date, opts.assumeDone), thm = blockTheme(P, date);
   const r = rng(hash(date + '|alt|' + (seed || 0)));
   const shown = [];
   const collect = lv => {
@@ -1060,7 +1090,7 @@ function alternatives(state, date, plan, opts, seed) {
       if (t.level !== lv || t.test || t.id === plan.tid || !templateOk(t, sp, P, dayLong)) return;
       if (t.dur[0] > (opts.forceDur || plan.dur + 10)) return;
       const last = ctx.lastUse[t.id];
-      let w = (W[sp] || 0.05) / maxW * (last == null ? 1.3 : last <= 3 ? 0.08 : last <= 7 ? 0.3 : last <= 14 ? 0.7 : 1);
+      let w = (W[sp] || 0.05) / maxW * (last == null ? 1.3 : last <= 3 ? 0.08 : last <= 7 ? 0.3 : last <= 14 ? 0.7 : 1) * (thm.w[t.focus] || 1);
       if (sp === plan.sport) w *= 1.4;
       c.push({ t, sp, w, lv });
     }));
@@ -1101,7 +1131,7 @@ const INDOOR_EQ = {
 };
 function indoorVersion(plan, profile, state) {
   const t = TEMPLATES[plan.tid];
-  const cap = (profile && profile.indoorMax) || 70;
+  const cap = indoorCap(profile, state ? !!dayCfg(state, plan.date).long : !!plan.dayLong);
   let tid = null;
   if (t.sports.includes('indoor') && t.dur[0] <= cap) tid = t.id;
   else {
@@ -1240,6 +1270,9 @@ function activityLevel(a, P) {
     const z4 = +z[3] || 0, z5 = z.slice(4).reduce((x, y) => x + (+y || 0), 0);
     if (z5 >= 360 || z4 + z5 >= 1200) lvl = Math.max(lvl, 4); else if (z4 + z5 >= 600) lvl = Math.max(lvl, 3);
   }
+  // uscite lunghissime: anche a intensità bassa pesano sul recupero (carico Intervals)
+  const ld = +(a.icu_training_load || 0);
+  if (ld >= 140) lvl = Math.max(lvl, 4); else if (ld >= 100) lvl = Math.max(lvl, 3);
   if (a.average_heartrate && P && P.lthr && h >= 0.33) {
     const r = a.average_heartrate / P.lthr;
     if (r >= 0.92) lvl = Math.max(lvl, 4); else if (r >= 0.87) lvl = Math.max(lvl, 3);
@@ -1250,7 +1283,7 @@ function activityLevel(a, P) {
 root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
-  defaultProfile, profileFor, readiness, propose, alternatives, FOCUS_INFO, indoorVersion, build, stats, profileBars, targetText,
+  defaultProfile, profileFor, indoorCap, blockTheme, THEMES, TR_W, GREEN, readiness, propose, alternatives, FOCUS_INFO, indoorVersion, build, stats, profileBars, targetText,
   toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
 };
 })(typeof window !== 'undefined' ? window : globalThis);

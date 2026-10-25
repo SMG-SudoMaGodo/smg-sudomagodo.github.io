@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 21 ottobre 2026 · versione app **1.21** · cache service worker `smg-org-v58`
+Aggiornate al 25 ottobre 2026 · versione app **1.22** · cache service worker `smg-org-v59`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -19,7 +19,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - I dati restano solo nel telefono (localStorage `smg-v1`); il repository contiene solo codice.
 
 **Funzioni principali.**
-- **Check-in del mattino**: sensazione, HRV, FC a riposo, sonno, Training Readiness facoltativa (media 50/50), malanno (raffreddore oppure febbre). Semaforo verde ≥70, arancione ≥50, rosso sotto; dettaglio del punteggio voce per voce.
+- **Check-in del mattino**: sensazione, HRV, FC a riposo, sonno, Training Readiness facoltativa (pesa il **25%**, dalla v1.22; prima 50%), malanno (raffreddore oppure febbre). Semaforo verde **≥68** (prima 70), arancione ≥50, rosso sotto; dettaglio del punteggio voce per voce. Costanti `TR_W` e `GREEN` in `engine.js`.
 - **Riquadri degli indicatori cliccabili** (HRV, FC a riposo, sonno, Forma, Training Readiness): andamento a 14, 30 o 60 giorni, fascia della norma per la HRV, valore del giorno toccando o scorrendo il grafico, media, minimo e massimo.
 - **Seduta stabile**: dopo il check-in la proposta non cambia più da sola. Se arrivano dati nuovi compare "Adegua la seduta / Tieni questa". Toccando il grafico della seduta si apre il dettaglio dei blocchi.
 - **Comandi della seduta**: chip Sport e Tempo a disposizione, **Alternative**, Falla sui rulli, Invia, Fatta, "Decido io: esco con gli amici", Oggi salto (con alternativa di mobilità o forza).
@@ -35,7 +35,9 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
   - Toccando un'attività si apre il **dettaglio completo**, letto da Intervals al momento (`/activity/{id}` e `/streams.json`): tempo, distanza, dislivello, velocità, potenza media e normalizzata, IF, carico, FC, cadenza, calorie, VI, efficienza, deriva cardiaca, sforzo percepito; grafici di potenza, FC, altitudine e cadenza; tempo nelle zone; collegamento a Intervals.
   - Se la seduta era segnata "Oggi salto" e poi arriva un'attività, passa a "Fatta".
 - **Blocchi di 4 settimane** (3 di costruzione + 1 di scarico) ancorati a `deloadAnchor`, con Anticipa, Posticipa e "Da questa settimana". Al massimo 2 sedute dure a settimana.
-- **Inverno (ottobre–marzo)**: qualità sui rulli (massimo 70'), volume fuori, MTB preferita.
+- **Inverno (ottobre–marzo)**: qualità sui rulli (massimo 70', **90' nei giorni lunghi**: `profile.indoorMaxLong`, `indoorCap()`), volume fuori, MTB preferita. Giorno lungo con pioggia o buio: sui rulli una seduta media, non fondo.
+- **Temi dei blocchi** (dalla v1.22, `blockTheme()`): il tema dipende dal lunedì d'inizio del blocco: 15/10–15/11 **forza e sweet spot**, 16/11–15/12 **soglia**, 16/12–12/1 **varietà delle feste**, 13/1–9/2 **soglia e VO2max**, 10/2–9/3 **VO2max e brillantezza**, poi **bella stagione** (nessun accento). Ogni tema ha pesi per focus (`w`) e per livello (`lv`): es. forza = livello 3 ×3, 4 ×0,5, 5 ×0,15; SFR ×4, sweet spot ×2,5. Simulazione su 8 settimane: blocco forza 58% sedute medie, VO2max 2%; blocco soglia 26% soglia. Lo vedi in Profilo → Blocchi e scarico e tra i motivi della seduta.
+- **Uscite lunghissime**: in `activityLevel` carico Intervals ≥100 → almeno livello 3, ≥140 → livello 4 (per il recupero), anche a intensità bassa.
 - **Orario di uscita per giorno** (Profilo → La tua settimana): lunedì e mercoledì 18:00, venerdì 15:00, sabato e domenica 9:00. Pioggia, temperatura e punto di rugiada si guardano nelle ore di uscita. Col buio niente strada; MTB con le luci solo ogni tanto, con tempo asciutto, poco vento e almeno 5 °C. Avviso "porta le luci" se si rientra dopo il tramonto.
 - **Punto di rugiada** nella scheda meteo, con pallino colorato: verde fino a 16°, giallo 17–18°, rosso 19–21°, viola da 22°. Da 19° la proposta aggiunge un consiglio (corsa e sedute medie o dure all'aperto).
 - **Punto di rugiada, come si legge** (verificato il 21 ottobre): il pallino mostra il **massimo nelle ore di uscita** del giorno (dall'orario della settimana per min(durata massima, 120') ), non il valore attuale: per questo può differire dalle altre app, insieme al modello meteo (Open-Meteo "best match"; 1–2° tra modelli sono normali). Toccando il pallino si vedono i valori ora per ora e quello di adesso. Il calcolo è corretto: nessun errore trovato.
@@ -96,6 +98,14 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 **Durate**
 - Salite in tempo con 60' disponibili dura 65': va bene così (deciso il 21 ottobre), non correggere.
 
+**Analisi del backup del 25 ottobre (30/9–25/10)**
+- Semaforo: 7 verdi, 15 arancioni, 4 rossi; senza Training Readiness sarebbero stati 13 verdi. La TR (50%) trascinava verso l'arancione e conta il carico già contato dalla Forma → decisa TR 25% e verde da 68 (stessi giorni: 11 verdi, 11 arancioni, 4 rossi; giorni sani 11/7/1).
+- In 4 settimane nessuna seduta dura proposta (sempre arancione → massimo livello medio).
+- Sedute medie sui rulli eseguite a livello "fondo" (IF < 0,8) con RPE 2–5: FTP 245 su Intervals troppo alta (stima di Fabrizio ~225). **Test FTP da fare subito** (settimana del 26/10, dopo lo scarico): Profilo → Test FTP → Anticipa. Poi FTP MyWhoosh = FTP × 0,948 (Tacx/Stages 164/173).
+- CTL da ~44 (fine agosto) a 36; ultime settimane 165–220 di carico, quasi tutto rulli (weekend a 70'). Deciso: rulli fino a 90' nei giorni lunghi. Venerdì resta giorno lungo (deciso da Fabrizio).
+- MTB senza potenza: livelli coerenti con RPE; uscite lunghissime sottostimate → regola del carico. FC soglia 164 viene dalla corsa: il test aggiornerà quella della bici.
+- Registro scelte: solo 2 voci; i rilanci prima delle Alternative indicano che sui rulli preferisce qualità al fondo. Rifare l'analisi a fine novembre.
+
 **Varietà (decisa il 21 ottobre)**
 - Fabrizio non vuole annoiarsi, ma la varietà dev'essere sempre al servizio del miglioramento e degli stimoli allenanti: le alternative restano allo stesso livello, ogni seduta dice cosa allena, la progressione resta quella dei blocchi.
 - Varietà anche nella corsa, per quando riprende dopo la fascite.
@@ -118,6 +128,6 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
    - Controllare che la seduta SMG arrivi su MyWhoosh nonostante il permesso "Attività" tolto, e che su Intervals arrivi solo l'attività del Fenix.
    - Controllare se sforzo percepito e sensazione inseriti su Garmin compaiono nell'attività su Intervals (ora si vedono nel dettaglio attività di SMG). Se non compaiono, inserirli su Intervals.
    - Dopo la calibrazione di Stages e Tacx, rifare il confronto (Profilo → Tacx e Stages → Rifai) e impostare su MyWhoosh l'FTP indicata.
-2. **FTP**: rifare il test a breve (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. Primo test con la lettura automatica: verificare che i 20' trovati coincidano col Lap del Fenix e che MyWhoosh spenga davvero l'ERG al blocco Test.
-3. **26 ottobre: analisi del backup.** Esportare il backup da SMG e caricarlo in chat per tarare semaforo, livelli MTB senza potenza, progressione e frequenza del test. Poi impostare i **temi dei blocchi** (vedi Varietà) e rivedere pesi e progressione delle sedute nuove.
+2. **FTP**: test nella settimana del 26 ottobre (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. Primo test con la lettura automatica: verificare che i 20' trovati coincidano col Lap del Fenix e che MyWhoosh spenga davvero l'ERG al blocco Test.
+3. **Fine novembre: seconda analisi del backup** (registro delle scelte più ricco, effetto del nuovo semaforo e dei temi, FTP nuova). Fatta la prima il 25 ottobre (vedi sopra).
 4. **Quando riprende la corsa** (ora ferma per la fascite): impostare la progressione di rientro.
