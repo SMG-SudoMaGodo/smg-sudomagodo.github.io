@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.20';
+const APP_V = '1.21';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -40,6 +40,7 @@ const I = {
   road: '<circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 9h6.5l3 7.5M9 9l3 7.5h-6.5M12 16.5 15.5 9M14 6.5h3.5l-1 2"/>',
   run: '<circle cx="15" cy="4.5" r="2"/><path d="M7 21l3.5-6 3 2.5V22M9.5 11.5l3-3.5 3.5 3 3 1M12.5 8 9 9.5 7 12.5M13.5 17.5l-3-2.5 2-4"/>',
   strength: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
+  walk: '<circle cx="12.5" cy="4.5" r="2"/><path d="M10 21l2-6 2.5 2.5V21M12 15l.5-5.5M12.5 9.5l3 2.5M12.5 9.5 9 12M18.5 10v11"/>',
   dice: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
   send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
@@ -74,10 +75,10 @@ function wxIcon(code) {
   else s = cloud('#6E7690') + '<path stroke="#FFC940" d="M12 15l-2 4h3l-2 4"/>';
   return '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round">' + s + '</svg>';
 }
-const SC = { indoor: 'var(--indoor)', mtb: 'var(--mtb)', road: 'var(--road)', run: 'var(--run)', strength: 'var(--strength)' };
+const SC = { indoor: 'var(--indoor)', mtb: 'var(--mtb)', road: 'var(--road)', run: 'var(--run)', walk: 'var(--walk)', strength: 'var(--strength)' };
 const ZC = { WALK: '#4A5368', Z1: '#5E6A82', Z2: '#3FD4FF', Z3: '#C4FF45', SS: '#E6EE3A', Z4: '#FFC940', O4: '#FFA41C', Z5: '#FF6A3D', Z6: '#FF3D6E', Z7: '#D24BFF', TEST: '#FF3D3D', MIX: '#8FA0B8' };
 const LC = { green: 'var(--green)', yellow: 'var(--yellow)', red: 'var(--red)' };
-const SH = { indoor: '#A994FF', mtb: '#B8F04A', road: '#FFB547', run: '#FF7BA9', strength: '#3FE0C5' };
+const SH = { indoor: '#A994FF', mtb: '#B8F04A', road: '#FFB547', run: '#FF7BA9', walk: '#7BD88F', strength: '#3FE0C5' };
 const sportIcon = s => '<div class="sporticon" style="background:' + SH[s] + '24;color:' + SH[s] + '">' + ico(s) + '</div>';
 
 /* ------------------------------------------------------------------ */
@@ -453,7 +454,7 @@ function workoutHTML(p, ro) {
       (p.sport === 'indoor' ? 'Fenix e MyWhoosh avviati insieme. ERG acceso nel riscaldamento, spento solo nei 20 minuti. Fanno fede i watt degli Stages sul Fenix.' : 'Bici da strada con gli Stages, su una salita regolare o un rettilineo senza incroci.') +
       ' Obiettivo: circa <strong style="color:var(--text)">' + Math.round(G / 0.95) + ' W</strong> di media nei 20 minuti.</span>' +
       (ro ? '' : '<button class="btn hot sm full" id="aTestHow" style="margin-top:8px">' + ico('flag') + 'Istruzioni passo passo</button>') + '</div></div>'; }
-  if (st.min >= 90 && p.sport !== 'run' || st.min >= 75 && p.sport === 'run') h += fuelHTML(st.min, p.sport, wxFor(p.date));
+  if (p.sport !== 'walk' && (st.min >= 90 && p.sport !== 'run' || st.min >= 75 && p.sport === 'run')) h += fuelHTML(st.min, p.sport, wxFor(p.date));
   if (!ro && p.reasons && p.reasons.length) h += '<div class="reasons">' + p.reasons.map(r => '<span class="pill">' + esc(r) + '</span>').join('') + '</div>';
   if (!p.free) h += '<details class="steps"' + (ro ? ' open' : '') + '><summary>Dettaglio della seduta ' + ico('chev') + '</summary>' + stepsHTML(sections, p.sport) + '</details>';
 
@@ -480,7 +481,7 @@ function workoutHTML(p, ro) {
         (icuOn() ? '<button class="btn" id="aPush">' + (busy.push ? ico('sync', 'spin') : ico(p.pushed ? 'check' : 'send')) + (p.pushed ? 'Inviata' : 'Invia') + '</button>'
                  : '<button class="btn" id="aIcuHow">' + ico('link') + 'Invia…</button>') +
         '<button class="btn hot wide" id="aDone">' + ico('check') + 'Fatta! Sudato e goduto</button>' +
-        '<button class="btn wide" id="aFriends"><span style="color:var(--hot2);display:flex">' + ico('user') + '</span>Decido io: esco con gli amici</button>' +
+        '<button class="btn wide" id="aFriends"><span style="color:var(--hot2);display:flex">' + ico('user') + '</span>Decido io: amici, corsa o camminata</button>' +
         '<button class="btn ghost wide sm" id="aSkip">Oggi salto</button></div>';
       if (p.pushed) h += '<div class="src" style="margin:12px 0 0">' + ico('check') + 'Su Intervals.icu: arriva su Fenix, Edge e MyWhoosh alla prossima sincronizzazione</div>';
     } else {
@@ -781,14 +782,14 @@ async function openActSheet(id) {
 }
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-act]'); if (b) { e.preventDefault(); openActSheet(b.dataset.act); } });
 function restHTML(p) {
-  if (p.tripRest) return '<div class="card rest"><div class="big">🧳</div><h2>Giornata libera</h2><p>In trasferta senza bici né corsa: goditi il posto, una camminata vale. ' + (S.profile.sports.strength ? 'Se ti va, qui sotto c\'è una sessione breve di forza e mobilità a corpo libero.' : '') + ' Se trovi una bici, cambia <b>Cosa hai con te</b> nel Profilo.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
+  if (p.tripRest) return '<div class="card rest"><div class="big">🧳</div><h2>Giornata libera</h2><p>In trasferta senza bici né corsa: goditi il posto, una camminata vale. ' + (S.profile.sports.strength ? 'Se ti va, qui sotto c\'è una sessione breve di forza e mobilità a corpo libero.' : '') + ' Se trovi una bici, cambia <b>Cosa hai con te</b> nel Profilo.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aFriends">' + ico('user') + 'Decido io</button></div></div>';
   if (p.illRest) return '<div class="card rest"><div class="big">🤒</div><h2>Riposa e guarisci</h2><p>Con febbre o dolori diffusi allenarsi fa solo danni. Bevi, dormi, e quando stai meglio segnalo nel check-in: SMG ti farà rientrare con calma.</p></div>';
-  if (p.special === 'off') return '<div class="card rest"><div class="big">📅</div><h2>Oggi hai un impegno</h2><p>Giorno segnato come impegnato. Se poi trovi un buco, puoi comunque muoverti.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aExtraDay">Ho trovato un buco</button><button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
+  if (p.special === 'off') return '<div class="card rest"><div class="big">📅</div><h2>Oggi hai un impegno</h2><p>Giorno segnato come impegnato. Se poi trovi un buco, puoi comunque muoverti.</p><div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aExtraDay">Ho trovato un buco</button><button class="btn" id="aFriends">' + ico('user') + 'Decido io</button></div></div>';
   const red = p.redRest;
   return '<div class="card rest"><div class="big">' + (red ? '🛋️' : '😌') + '</div><h2>' + (red ? 'Oggi riposo vero' : 'Giorno di riposo') + '</h2>' +
     '<p>' + (red ? 'Il semaforo è rosso: dormi, mangia bene, cammina un po\'. Domani si riparte più forti.' : 'Anche il riposo è allenamento: è adesso che il corpo si adatta e migliora.') + '</p>' +
     '<div class="row" style="flex-wrap:wrap;justify-content:center"><button class="btn" id="aExtraDay">' + (red ? 'Solo un giro leggerissimo' : 'Voglio muovermi lo stesso') + '</button>' +
-    '<button class="btn" id="aFriends">' + ico('user') + 'Esco con gli amici</button></div></div>';
+    '<button class="btn" id="aFriends">' + ico('user') + 'Decido io</button></div></div>';
 }
 
 const WXD = c => c <= 1 ? 'Sereno' : c === 2 ? 'Poco nuvoloso' : c === 3 ? 'Nuvoloso' : c <= 48 ? 'Nebbia' : c <= 57 ? 'Pioviggine' : c <= 67 ? 'Pioggia' : c <= 77 ? 'Neve' : c <= 82 ? 'Rovesci' : c <= 86 ? 'Neve' : 'Temporale';
@@ -1498,7 +1499,7 @@ const GUIDE = [
     <li><b>Cadenza</b>: nelle sedute con una cadenza da tenere (SFR, giochi e piramide di cadenza, frullini) la cadenza arriva a MyWhoosh e al Fenix come obiettivo in rpm insieme ai watt; in SMG la vedi nel dettaglio della seduta. Di base arriva il valore centrale della fascia (SFR 50–60 → 55 rpm). Con <b>Cadenza come fascia</b> (Profilo, sotto Tacx e Stages) arriva la fascia intera: il Fenix la mostra, MyWhoosh no (provato il 24 ottobre), quindi di base resta spento. In ERG la cadenza la scegli tu: per andare più piano non serve un rapporto più duro, il Tacx aumenta la resistenza da solo.</li>
     <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola. Con <b>Oggi salto</b> la seduta sparisce anche da Garmin e MyWhoosh, la settimana si riequilibra (una seduta dura saltata può tornare nei giorni dopo) e puoi scegliere un'alternativa breve di mobilità o forza leggera in base al tempo che hai. <b>Annulla</b> la rimette.</li>
     <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li>
-    <li><b>Decido io: esco con gli amici</b>: scegli sport, durata e "che aria tira" (tranquilla, mista, garosa). Sul Fenix non arriva nessun allenamento strutturato: registri l'uscita come sempre e SMG, leggendo da Intervals com'è andata davvero, regola i giorni dopo (se è stata dura, il giorno dopo si scarica). Funziona anche nei giorni di riposo. <b>Proposta SMG</b> rimette la seduta originale.</li></ul>
+    <li><b>Decido io: amici, corsa o camminata</b>: scegli cosa fai (bici, gruppo su MyWhoosh, corsa o camminata), la durata e l'intensità: per bici e corsa "che aria tira" (tranquilla, mista, garosa), per la camminata "che passo" (passeggiata, camminata svelta, escursione con dislivello). La corsa c'è anche se è in pausa nel Profilo, con un avviso per il piede. Sul Fenix non arriva nessun allenamento strutturato: registri l'attività come sempre e SMG legge da Intervals com'è andata (camminate ed escursioni compaiono come Camminata).</li></ul>
     <p>Ogni modifica dopo l'invio sostituisce la seduta su Intervals, Garmin e MyWhoosh.</p>
     <p><b>Dopo il check-in la seduta non cambia più da sola</b>, nemmeno se chiudi e riapri l'app. Se arrivano dati nuovi che cambiano il semaforo (per esempio HRV e sonno sincronizzati in ritardo), compare un avviso: scegli tu se adeguare la seduta o tenere quella di prima.</p>`],
   ['brain', 'Come sceglie', `<ul><li>Il semaforo fissa quanto può essere dura.</li>
@@ -1568,35 +1569,45 @@ const FEEL = [
   ['mix', 3, 'Mista', 'Qualche tirata sugli strappi o in volata'],
   ['race', 4, 'Garosa', 'Si fa a gara, cartelli e salite a tutta']
 ];
-const FREE_NAME = { mtb: 'Giro in MTB con gli amici', road: 'Uscita in bici con gli amici', run: 'Corsa con gli amici', indoor: 'Uscita di gruppo su MyWhoosh' };
+// camminata: intensità propria (la corsa usa quelle della bici)
+const FEEL_WALK = [
+  ['stroll', 1, 'Passeggiata', 'Passo tranquillo, si parla e ci si guarda intorno'],
+  ['brisk', 2, 'Camminata svelta', 'Passo deciso, respiro un po\' più alto'],
+  ['hike', 3, 'Escursione con dislivello', 'Salite vere, sentiero, zaino']
+];
+const feelList = sp => sp === 'walk' ? FEEL_WALK : FEEL;
+const FREE_NAME = { mtb: 'Giro in MTB con gli amici', road: 'Uscita in bici con gli amici', run: 'Corsa a sensazione', walk: 'Camminata', indoor: 'Uscita di gruppo su MyWhoosh' };
+const FREE_LAB = { indoor: 'Gruppo su MyWhoosh', walk: 'Camminata', run: 'Corsa' };
 function openFriendsSheet(d) {
   const p = S.plans[d] || { date: d }; const base = p.free ? p.orig : p;
-  const sports = ['mtb', 'road', 'run', 'indoor'].filter(x => S.profile.sports[x]);   // con gli amici anche in trasferta: magari la bici te la prestano
+  // bici del profilo (anche in trasferta: magari te la prestano), più corsa e camminata sempre
+  const sports = ['mtb', 'road', 'indoor'].filter(x => S.profile.sports[x]).concat(['run', 'walk']);
   let sp = p.free ? p.sport : (sports.includes('mtb') ? 'mtb' : sports[0]);
   let dur = p.free ? p.dur : (base && !base.rest && base.dur ? Math.max(60, base.dur) : 120);
   let fe = p.free ? p.freeFeel : 'mix';
   const draw = () => {
     const chip = (attr, val, on, lab) => '<button class="chip' + (on ? ' on' : '') + '" data-' + attr + '="' + val + '">' + lab + '</button>';
     document.getElementById('frBody').innerHTML =
-      '<div class="ctl"><div class="lab">Cosa fate</div><div class="chips" style="flex-wrap:wrap">' + sports.map(x => chip('fsp', x, x === sp, x === 'indoor' ? 'Gruppo su MyWhoosh' : E.SPORTS[x].name)).join('') + '</div>' +
-      '<div class="lab">Quanto pensi di stare fuori</div><div class="chips" style="flex-wrap:wrap">' + [45, 60, 90, 120, 150, 180, 240, 300].map(m => chip('fdu', m, m === dur, fmtMin(m))).join('') + '</div>' +
-      '<div class="lab">Che aria tira</div></div>' +
-      FEEL.map(f => '<button class="day" data-ffe="' + f[0] + '" style="' + (f[0] === fe ? 'border-color:var(--hot)' : '') + '"><div class="info"><b>' + f[2] + '</b><small>' + f[3] + '</small></div>' + dots(f[1]) + '</button>').join('');
-    document.querySelectorAll('[data-fsp]').forEach(b => b.onclick = () => { sp = b.dataset.fsp; draw(); });
+      '<div class="ctl"><div class="lab">Cosa fai</div><div class="chips" style="flex-wrap:wrap">' + sports.map(x => chip('fsp', x, x === sp, FREE_LAB[x] || E.SPORTS[x].name)).join('') + '</div>' +
+      (sp === 'run' && !S.profile.sports.run ? '<div class="mut" style="font-size:12.5px;margin:-2px 2px 8px">La corsa è in pausa nel Profilo: vai piano e fermati se il piede si fa sentire.</div>' : '') +
+      '<div class="lab">Quanto pensi di stare fuori</div><div class="chips" style="flex-wrap:wrap">' + [30, 45, 60, 90, 120, 150, 180, 240, 300].map(m => chip('fdu', m, m === dur, fmtMin(m))).join('') + '</div>' +
+      '<div class="lab">' + (sp === 'walk' ? 'Che passo' : 'Che aria tira') + '</div></div>' +
+      feelList(sp).map(f => '<button class="day" data-ffe="' + f[0] + '" style="' + (f[0] === fe ? 'border-color:var(--hot)' : '') + '"><div class="info"><b>' + f[2] + '</b><small>' + f[3] + '</small></div>' + dots(f[1]) + '</button>').join('');
+    document.querySelectorAll('[data-fsp]').forEach(b => b.onclick = () => { sp = b.dataset.fsp; if (!feelList(sp).some(f => f[0] === fe)) fe = sp === 'walk' ? 'brisk' : 'mix'; draw(); });
     document.querySelectorAll('[data-fdu]').forEach(b => b.onclick = () => { dur = +b.dataset.fdu; draw(); });
     document.querySelectorAll('[data-ffe]').forEach(b => b.onclick = () => { fe = b.dataset.ffe; draw(); });
   };
-  openSheet('<div class="guide"><h2>Oggi decidi tu</h2><p class="intro">Uscita in compagnia, a sensazione. Sul Fenix non arriva nessun allenamento strutturato; da Intervals SMG vedrà com\'è andata e regolerà i prossimi giorni.</p><div id="frBody"></div>' +
+  openSheet('<div class="guide"><h2>Oggi decidi tu</h2><p class="intro">Bici, corsa o camminata, da solo o in compagnia, a sensazione. Sul Fenix non arriva nessun allenamento strutturato; da Intervals SMG vedrà com\'è andata e regolerà i prossimi giorni.</p><div id="frBody"></div>' +
     '<button class="btn hot full" id="frGo" style="margin-top:12px">Fatto, divertiti!</button></div>', () => {
       draw();
       document.getElementById('frGo').onclick = () => {
-        const f = FEEL.find(x => x[0] === fe); const rd = E.readiness(S.checkins, d);
+        const f = feelList(sp).find(x => x[0] === fe) || feelList(sp)[1]; const rd = E.readiness(S.checkins, d);
         const np = { date: d, tid: 'friends', sport: sp, level: f[1], dur, free: true, freeFeel: fe, freeName: FREE_NAME[sp], status: 'planned',
           lightUsed: rd ? rd.light : 'free', light: rd ? rd.light : null, score: rd ? rd.score : null, v: ENGINE_V, opts: {},
           reasons: ['Uscita scelta da te: ' + f[2].toLowerCase()], orig: base && !base.free ? JSON.parse(JSON.stringify(base)) : (p.orig || null),
           pushed: !!(p && p.pushed), pushedSig: null };
         logChoice('friends', base && !base.rest ? base : { date: d }, { to: sp, feel: fe });
-        S.plans[d] = np; save(); syncPushState(np); closeSheet(); toast('Buona uscita!'); render();
+        S.plans[d] = np; save(); syncPushState(np); closeSheet(); toast(sp === 'walk' ? 'Buona camminata!' : 'Buona uscita!'); render();
       };
     });
 }

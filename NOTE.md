@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 21 ottobre 2026 · versione app **1.20** · cache service worker `smg-org-v57`
+Aggiornate al 21 ottobre 2026 · versione app **1.21** · cache service worker `smg-org-v58`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -23,6 +23,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 - **Riquadri degli indicatori cliccabili** (HRV, FC a riposo, sonno, Forma, Training Readiness): andamento a 14, 30 o 60 giorni, fascia della norma per la HRV, valore del giorno toccando o scorrendo il grafico, media, minimo e massimo.
 - **Seduta stabile**: dopo il check-in la proposta non cambia più da sola. Se arrivano dati nuovi compare "Adegua la seduta / Tieni questa". Toccando il grafico della seduta si apre il dettaglio dei blocchi.
 - **Comandi della seduta**: chip Sport e Tempo a disposizione, **Alternative**, Falla sui rulli, Invia, Fatta, "Decido io: esco con gli amici", Oggi salto (con alternativa di mobilità o forza).
+- **Decido io** (dalla v1.21 "Decido io: amici, corsa o camminata"): oltre alle bici del profilo e al gruppo su MyWhoosh ci sono sempre **corsa** (anche se in pausa, con avviso per il piede) e **camminata** (nuovo sport `walk`, intensità: passeggiata 1, camminata svelta 2, escursione con dislivello 3). Durata da 30'. Le attività Intervals Walk/Hike ora diventano `walk` (prima contavano come corsa).
 - **Alternative** (dalla v1.9, sostituisce Rilancia): scheda con 3 sedute dello **stesso livello** (stesso stimolo e stesse regole di recupero), ciascuna con grafico, durata, carico, cosa allena e descrizione; "Scelgo questa" la fissa (`opts.forceTid` + `forceSport`, `opts.picked`, motivo "Scelta da te tra le alternative"); "Altre 3" ne mostra altre; il chip Sport "Automatico" torna alla proposta di SMG. Motore: `E.alternatives(state, date, plan, opts, seed)`: sport con peso ≥12% del migliore secondo meteo, luce e stagione (in inverno le dure restano sui rulli), durata vicina a quella di oggi, preferenza per sedute non fatte da un po' e per stimoli (focus) e sport diversi tra loro; se a quel livello ce ne sono meno di 3, completa con il livello sotto.
 - **Registro delle scelte** (dalla v1.18): `S.choices` (max 1500 voci, finisce nel backup). Ogni voce: `d`, `t` (ora locale), `act`, la seduta proposta in quel momento (`tid`, `sport`, `level`, `dur`, `light`, `picked`) e i dettagli. `act`: `alt_open` (con `round` e `shown`), `alt_pick` (`to`, `toSport`), `alt_keep`, `sport` (`to` o `auto`), `dur`, `indoor` (`to`), `skip`, `friends` (`to`, `feel`). Serve all'analisi del backup: quali sedute vengono scartate, quali scelte. Dati utili solo dal 21 ottobre: rifare l'analisi dopo un mese per avere numeri solidi.
 - **Cosa allena**: ogni seduta ha un `focus` (rec, fondo, tecnica, brio, tempo, ss, forza, soglia, vo2, sprint, test) con etichetta e frase in `FOCUS_INFO`, mostrata sotto la descrizione. Servirà anche per dare un tema ai blocchi.

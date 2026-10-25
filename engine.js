@@ -52,6 +52,7 @@ const SPORTS = {
   mtb:      { name: 'MTB / Gravel',  sub: 'Outdoor',          target: 'hr',    icu: 'MountainBikeRide' },
   road:     { name: 'Bici da strada', sub: 'Outdoor · potenza', target: 'power', icu: 'Ride' },
   run:      { name: 'Corsa',         sub: 'A piedi',          target: 'pace',  icu: 'Run' },
+  walk:     { name: 'Camminata',     sub: 'A piedi · escursione', target: 'hr', icu: 'Walk' },
   strength: { name: 'Forza & mobilità', sub: 'Extra',         target: 'none',  icu: 'WeightTraining' }
 };
 
@@ -138,7 +139,7 @@ const T = [
     } },
 
   /* ---------- uscita decisa da te (mai proposta in automatico) ---------- */
-  { id: 'friends', name: 'Uscita con gli amici', level: 2, sports: ['mtb', 'road', 'run', 'indoor'], dur: [30, 360], manual: true,
+  { id: 'friends', name: 'Uscita con gli amici', level: 2, sports: ['mtb', 'road', 'run', 'walk', 'indoor'], dur: [30, 360], manual: true,
     desc: 'Oggi decidi tu: niente blocchi da rispettare, si va a sensazione e ci si gode la compagnia. SMG legge da Intervals com\'è andata davvero e regola i giorni successivi.',
     build(D) { return [sec('In compagnia', [st('MIX', D, 'A sensazione, goditi la compagnia')])]; } },
 
@@ -1220,7 +1221,8 @@ function activitySport(type) {
   type = (type || '').toLowerCase();
   if (type.includes('virtual')) return 'indoor';
   if (type.includes('mountain') || type.includes('gravel')) return 'mtb';
-  if (type.includes('run') || type.includes('walk') || type.includes('hike')) return 'run';
+  if (type.includes('walk') || type.includes('hike')) return 'walk';
+  if (type.includes('run')) return 'run';
   if (type.includes('weight') || type.includes('workout') || type.includes('yoga')) return 'strength';
   if (type.includes('ride')) return 'road';
   return 'other';
