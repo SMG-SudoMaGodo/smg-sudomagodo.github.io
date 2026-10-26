@@ -1172,7 +1172,7 @@ function targetText(z, sport, P) {
   }
   if (tgt === 'pace') {
     if (z === 'WALK') return 'Cammino';
-    if (z === 'Z1' || z === 'Z2') return '< ' + Math.round(P.lthr * Z.hr[1] / 100) + ' bpm';
+    if (z === 'Z1' || z === 'Z2') return '< ' + Math.round((P.lthrRun || P.lthr) * Z.hr[1] / 100) + ' bpm';   // FC di soglia della corsa
     const f = p => { const s = Math.round(P.thrPace / (p / 100)); return Math.floor(s / 60) + ':' + pad(s % 60); };
     return f(Z.pace[0]) + '–' + f(Z.pace[1]) + ' /km';
   }
@@ -1273,8 +1273,9 @@ function activityLevel(a, P) {
   // uscite lunghissime: anche a intensità bassa pesano sul recupero (carico Intervals)
   const ld = +(a.icu_training_load || 0);
   if (ld >= 140) lvl = Math.max(lvl, 4); else if (ld >= 100) lvl = Math.max(lvl, 3);
-  if (a.average_heartrate && P && P.lthr && h >= 0.33) {
-    const r = a.average_heartrate / P.lthr;
+  const lt = P && (activitySport(a.type) === 'run' ? (P.lthrRun || P.lthr) : P.lthr);   // soglia della corsa per le corse, della bici per il resto
+  if (a.average_heartrate && lt && h >= 0.33) {
+    const r = a.average_heartrate / lt;
     if (r >= 0.92) lvl = Math.max(lvl, 4); else if (r >= 0.87) lvl = Math.max(lvl, 3);
   }
   return lvl;

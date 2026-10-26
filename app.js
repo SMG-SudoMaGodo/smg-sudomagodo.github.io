@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.22';
+const APP_V = '1.23';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -209,11 +209,14 @@ async function icuProfile() {
   S.icu.rideSS = ride && ride.id != null ? ride.id : null;   // per scrivere l'FTP dopo un test
   const P = S.profile, got = {}, changed = [];
   const ftp = ride && +(ride.ftp || 0); if (ftp >= 80 && ftp <= 600) got.ftp = Math.round(ftp);
-  const lthr = ride && +(ride.lthr || ride.fthr || 0) || run && +(run.lthr || run.fthr || 0); if (lthr >= 100 && lthr <= 220) got.lthr = Math.round(lthr);
+  // FC di soglia separate: bici (impostazioni Ride) e corsa (impostazioni Run); senza quella della bici si usa quella della corsa
+  const lthrR = run && +(run.lthr || run.fthr || 0), lthr = ride && +(ride.lthr || ride.fthr || 0) || lthrR;
+  if (lthr >= 100 && lthr <= 220) got.lthr = Math.round(lthr);
+  if (lthrR >= 100 && lthrR <= 220) got.lthrRun = Math.round(lthrR);
   const w = +(a.icu_weight || a.weight || 0); S.icu.setW = w >= 35 && w <= 150 ? Math.round(w * 10) / 10 : null;  // usato se non c'è un peso giornaliero
   let tp = run && +(run.threshold_pace || 0);
   if (tp) { const sec = tp > 1.5 && tp < 8 ? 1000 / tp : tp >= 150 && tp <= 600 ? tp : 0; if (sec) got.thrPace = Math.round(sec); }
-  const lab = { ftp: v => 'FTP ' + v + ' W', lthr: v => 'FC di soglia ' + v + ' bpm', weight: v => 'peso ' + String(v).replace('.', ',') + ' kg', thrPace: v => 'passo di soglia ' + Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0') };
+  const lab = { ftp: v => 'FTP ' + v + ' W', lthr: v => 'FC di soglia bici ' + v + ' bpm', lthrRun: v => 'FC di soglia corsa ' + v + ' bpm', weight: v => 'peso ' + String(v).replace('.', ',') + ' kg', thrPace: v => 'passo di soglia ' + Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0') };
   Object.keys(got).forEach(k => { if (P[k] !== got[k]) { if (k === 'ftp' && S.icu.prof && S.icu.prof.includes('ftp')) P.lastTest = today(); P[k] = got[k]; changed.push(lab[k](got[k])); } });
   S.icu.prof = Object.keys(got).filter(k => k !== 'weight');
   return changed;
@@ -1356,7 +1359,8 @@ function renderProfilo() {
   h += '<div class="card"><h3>Atleta</h3>' +
     '<div class="set"><div class="l"><b>FTP</b><small>' + (P.ftp / P.weight).toFixed(2).replace('.', ',') + ' W/kg</small>' + srcNote('ftp') + '</div><div class="v">' + num('pFtp', P.ftp, 'W', 'ftp') + '</div></div>' +
     '<div class="set"><div class="l"><b>Peso</b>' + srcNote('weight') + '</div><div class="v">' + num('pW', String(P.weight).replace('.', ','), 'kg', 'weight') + '</div></div>' +
-    '<div class="set"><div class="l"><b>FC di soglia</b><small>Zone cardio per bici e corsa</small>' + srcNote('lthr') + '</div><div class="v">' + num('pLthr', P.lthr, 'bpm', 'lthr') + '</div></div>' +
+    '<div class="set"><div class="l"><b>FC di soglia bici</b><small>Zone cardio della MTB; si aggiorna col test FTP</small>' + srcNote('lthr') + '</div><div class="v">' + num('pLthr', P.lthr, 'bpm', 'lthr') + '</div></div>' +
+    '<div class="set"><div class="l"><b>FC di soglia corsa</b><small>Limiti di FC delle corse facili</small>' + srcNote('lthrRun') + '</div><div class="v">' + num('pLthrR', P.lthrRun || P.lthr, 'bpm', 'lthrRun') + '</div></div>' +
     '<div class="set"><div class="l"><b>Passo di soglia</b><small>Per le sedute di corsa</small>' + srcNote('thrPace') + '</div><div class="v">' + num('pPace', pace(P.thrPace), '/km', 'thrPace') + '</div></div>' +
     ((S.icu.prof || []).length && icuOn() ? '<div class="mut" style="font-size:12.5px;margin-top:8px">I valori da Intervals.icu si aggiornano a ogni sincronizzazione: per cambiarli, modificali su Intervals.</div>' : '') +
     (() => { const nt = E.nextTest(P, today());
@@ -1416,7 +1420,7 @@ function renderProfilo() {
 function bindProfilo() {
   const P = S.profile; const g = id => document.getElementById(id);
   const numIn = (id, fn) => { const el = g(id); if (el) el.onchange = () => { const v = +el.value.replace(',', '.'); if (!isNaN(v) && v > 0) { fn(v); save(); render(); } else render(); }; };
-  numIn('pFtp', v => P.ftp = Math.round(v)); numIn('pW', v => P.weight = v); numIn('pLthr', v => P.lthr = Math.round(v));
+  numIn('pFtp', v => P.ftp = Math.round(v)); numIn('pW', v => P.weight = v); numIn('pLthr', v => P.lthr = Math.round(v)); numIn('pLthrR', v => P.lthrRun = Math.round(v));
   g('pPace').onchange = () => { const m = g('pPace').value.match(/^(\d{1,2})[:.,'](\d{1,2})$/); if (m) { P.thrPace = +m[1] * 60 + +m[2]; save(); } render(); };
   g('pTest').onclick = () => { const d = Object.keys(S.plans).filter(k => k <= today() && k >= E.addDays(today(), -7) && S.plans[k].tid === 'ftp_test' && S.plans[k].status === 'done').sort().pop(); openTestSheet(d || today()); };
   g('pTestSoon').onclick = () => { P.testSoon = !P.testSoon; save(); toast(P.testSoon ? 'Il test arriva al primo giorno verde di qualità (lun, mer o sab)' : 'Test di nuovo dopo il prossimo scarico'); render(); };
@@ -1812,7 +1816,7 @@ function openTestSheet(d) {
     : 'Leggi sul Fenix il Lap dei 20 minuti: potenza media (dagli Stages) e FC media.' + (icuOn() && p ? ' <span id="tLoad">' + ico('sync', 'spin') + ' Provo a leggerli da Intervals…</span>' : '');
   openSheet('<div class="guide"><h2>Risultato del test</h2><p class="intro">' + intro + '</p>' +
     '<div class="set"><div class="l"><b>Potenza media 20\'</b></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tW" placeholder="' + Math.round(testGuess() / 0.95) + '"' + (au ? ' value="' + au.w + '"' : '') + '><span>W</span></div></div></div></div>' +
-    '<div class="set"><div class="l"><b>FC media 20\'</b><small>Facoltativa: diventa la FC di soglia</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tH" placeholder="' + P.lthr + '"' + (au && au.hr ? ' value="' + au.hr + '"' : '') + '><span>bpm</span></div></div></div></div>' +
+    '<div class="set"><div class="l"><b>FC media 20\'</b><small>Facoltativa: diventa la FC di soglia della bici</small></div><div class="v"><div class="unit field"><div class="unit"><input inputmode="numeric" id="tH" placeholder="' + P.lthr + '"' + (au && au.hr ? ' value="' + au.hr + '"' : '') + '><span>bpm</span></div></div></div></div>' +
     '<details class="steps"' + (P.tacx ? '' : ' open') + '><summary>Confronto Tacx / Stages (facoltativo) ' + ico('chev') + '</summary><div class="mut" style="font-size:13px;margin:4px 2px 6px">Watt medi dell\'intera seduta di oggi su MyWhoosh e sul Fenix: serve a calcolare l\'FTP da impostare su MyWhoosh.' + (P.tacx ? ' Ultimo confronto: ' + longDate(P.tacx.date) + '.' : '') + '</div>' + tacxFields(P.tacx && P.tacx.t, P.tacx && P.tacx.s) + '</details>' +
     '<div id="tOut" class="t2" style="margin:12px 2px;font-size:14.5px">FTP = 95% della potenza media.</div>' +
     '<button class="btn hot full" id="tSave" disabled>Sì, aggiorna l\'FTP</button>' +
@@ -1823,7 +1827,7 @@ function openTestSheet(d) {
         if (!v.w) { out.textContent = 'FTP = 95% della potenza media.'; btn.textContent = 'Sì, aggiorna l\'FTP'; return; }
         const f = Math.round(v.w * 0.95), diff = f - P.ftp;
         btn.textContent = 'Sì, aggiorna a ' + f + ' W' + (icuOn() ? ' (anche su Intervals)' : '');
-        out.innerHTML = 'Nuova FTP: <b style="color:var(--hot2)">' + f + ' W</b> (' + (diff >= 0 ? '+' : '') + diff + ' W rispetto a ' + P.ftp + ', ' + (f / P.weight).toFixed(2).replace('.', ',') + ' W/kg)' + (v.hr ? '<br>FC di soglia: <b>' + v.hr + ' bpm</b> (prima ' + P.lthr + ')' : '') +
+        out.innerHTML = 'Nuova FTP: <b style="color:var(--hot2)">' + f + ' W</b> (' + (diff >= 0 ? '+' : '') + diff + ' W rispetto a ' + P.ftp + ', ' + (f / P.weight).toFixed(2).replace('.', ',') + ' W/kg)' + (v.hr ? '<br>FC di soglia bici: <b>' + v.hr + ' bpm</b> (prima ' + P.lthr + ')' : '') +
           '<br><b>Aggiorno l\'FTP?</b>'; };
       $w.oninput = upd; $h.oninput = upd; upd();
       if (!au && icuOn() && p) readTestFromIcu(d).then(r => {
