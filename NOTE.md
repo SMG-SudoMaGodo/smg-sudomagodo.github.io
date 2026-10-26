@@ -128,6 +128,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
    - Controllare che la seduta SMG arrivi su MyWhoosh nonostante il permesso "Attività" tolto, e che su Intervals arrivi solo l'attività del Fenix.
    - Controllare se sforzo percepito e sensazione inseriti su Garmin compaiono nell'attività su Intervals (ora si vedono nel dettaglio attività di SMG). Se non compaiono, inserirli su Intervals.
    - Dopo la calibrazione di Stages e Tacx, rifare il confronto (Profilo → Tacx e Stages → Rifai) e impostare su MyWhoosh l'FTP indicata.
-2. **FTP**: test nella settimana del 26 ottobre (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. **Test fatto il 26 ottobre**: MyWhoosh spegne l'ERG da solo al blocco Test (verificato). Da verificare ancora: i 20' trovati da SMG coincidono col Lap del Fenix.
+2. **FTP**: test nella settimana del 26 ottobre (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. **Test fatto il 26 ottobre**: 225 W e FC 155 bpm (valori riferiti da Fabrizio). MyWhoosh spegne l'ERG da solo al blocco Test; SMG ha letto il test da solo da Intervals anche con l'autolap attivo sul Fenix (cerca i 20' migliori negli stream, i Lap non servono). FTP e FC di soglia aggiornate su SMG, Intervals e Garmin Connect; resta MyWhoosh (FTP × 0,948).
+   - FC di soglia ora 155 (bici, prima 164 dalla corsa). In SMG `lthr` è unico: quando riprende la corsa, controllare i limiti di FC delle corse facili (si basano su `lthr`).
 3. **Fine novembre: seconda analisi del backup** (registro delle scelte più ricco, effetto del nuovo semaforo e dei temi, FTP nuova). Fatta la prima il 25 ottobre (vedi sopra).
 4. **Quando riprende la corsa** (ora ferma per la fascite): impostare la progressione di rientro.
