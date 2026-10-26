@@ -128,6 +128,6 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
    - Controllare che la seduta SMG arrivi su MyWhoosh nonostante il permesso "Attività" tolto, e che su Intervals arrivi solo l'attività del Fenix.
    - Controllare se sforzo percepito e sensazione inseriti su Garmin compaiono nell'attività su Intervals (ora si vedono nel dettaglio attività di SMG). Se non compaiono, inserirli su Intervals.
    - Dopo la calibrazione di Stages e Tacx, rifare il confronto (Profilo → Tacx e Stages → Rifai) e impostare su MyWhoosh l'FTP indicata.
-2. **FTP**: test nella settimana del 26 ottobre (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. Primo test con la lettura automatica: verificare che i 20' trovati coincidano col Lap del Fenix e che MyWhoosh spenga davvero l'ERG al blocco Test.
+2. **FTP**: test nella settimana del 26 ottobre (stima ~225 W). Profilo → Test FTP → Anticipa se non arriva da solo. **Test fatto il 26 ottobre**: MyWhoosh spegne l'ERG da solo al blocco Test (verificato). Da verificare ancora: i 20' trovati da SMG coincidono col Lap del Fenix.
 3. **Fine novembre: seconda analisi del backup** (registro delle scelte più ricco, effetto del nuovo semaforo e dei temi, FTP nuova). Fatta la prima il 25 ottobre (vedi sopra).
 4. **Quando riprende la corsa** (ora ferma per la fascite): impostare la progressione di rientro.
