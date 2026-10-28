@@ -123,8 +123,8 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 
 **Atleta e disponibilità**
 - **Test FTP del 26 ottobre**:
-  - valori riferiti da Fabrizio: **225 W e FC 155 bpm**. Non è chiaro se 225 W sia la media dei 20' (FTP 214) o l'FTP già salvata: fa fede il valore nel Profilo;
-  - FTP e FC di soglia della bici aggiornate su SMG, Intervals e Garmin Connect;
+  - dal backup del 28/10: media dei 20' **237 W** → **FTP 225 W**, FC di soglia **155 bpm**;
+  - FTP e FC di soglia della bici aggiornate su SMG, Intervals e Garmin Connect; su MyWhoosh FTP **213 W** (225 × 0,948), impostata il 28/10;
   - prima l'FTP era 245, troppo alta, e falsava intensità e carichi.
 - FC di soglia **bici 155**, **corsa 164** (separate dalla v1.23). Passo di soglia 4:08/km. Peso e dati personali arrivano da Intervals.
 - **Settimana**:
@@ -190,19 +190,18 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 
 ## 3. Prossimi passi
 
-1. **MyWhoosh**: impostare l'FTP nuova × 0,948 (il valore è in Profilo → Tacx e Stages). È l'ultimo passaggio rimasto dopo il test.
-2. **Seguire il blocco forza e sweet spot** (26/10–15/11, poi scarico 16–22/11). Controllare che:
+1. **Seguire il blocco forza e sweet spot** (26/10–15/11, poi scarico 16–22/11). Controllare che:
    - il semaforo nuovo dia più verdi;
    - arrivino SFR e sweet spot all'intensità giusta, con RPE 6–7 sullo sweet spot;
    - nei weekend di pioggia i rulli arrivino a 90' con sedute medie.
-3. **Fine novembre: seconda analisi del backup**. Da guardare:
+2. **Lunedì 16/11 (inizio scarico): seconda analisi del backup** del blocco forza (26/10–15/11). Promemoria impostato in chat. Così c'è tutta la settimana di scarico per tarare e pubblicare prima del blocco soglia. Da guardare:
    - registro delle scelte, più ricco;
    - effetto del semaforo e dei temi;
-   - carico e CTL;
+   - carico e CTL (36 il 28/10). D'inverno freddo, buio e maltempo limitano il volume: obiettivo realistico **tenerla stabile** (36–40), non per forza risalire. Guardare soprattutto i giorni lunghi del weekend;
    - sedute scartate;
    - eventuali varianti di struttura delle sedute.
 
-   Poi tarare i pesi dei temi prima del blocco soglia (dal 23/11).
-4. **Prossimo test FTP**: con le regole attuali verso metà-fine dicembre (≥6 settimane, prima settimana dopo uno scarico). Se si sente molto più in forma prima, "Anticipa".
-5. **Quando riprende la corsa** (ora ferma per la fascite): riattivarla nel Profilo con la fase 1, impostare i tempi della progressione di rientro e controllare i limiti di FC delle corse facili (si basano sulla soglia della corsa, 164).
-6. **Idee in attesa** (solo se servono): varianti di struttura nelle sedute principali; file .zwo per MyWhoosh se un giorno servisse la fascia di cadenza (oggi non serve).
+   Poi tarare i pesi dei temi prima del blocco soglia (dal 23/11). Fino ad allora **non cambiare il motore**, per non confondere l'analisi.
+3. **Prossimo test FTP**: con le regole attuali verso metà-fine dicembre (≥6 settimane, prima settimana dopo uno scarico). Se si sente molto più in forma prima, "Anticipa".
+4. **Quando riprende la corsa** (ora ferma per la fascite): riattivarla nel Profilo con la fase 1, impostare i tempi della progressione di rientro e controllare i limiti di FC delle corse facili (si basano sulla soglia della corsa, 164).
+5. **Idee in attesa** (solo se servono): varianti di struttura nelle sedute principali; file .zwo per MyWhoosh se un giorno servisse la fascia di cadenza (oggi non serve).
