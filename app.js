@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.23';
+const APP_V = '1.24';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -278,7 +278,7 @@ async function icuSync(quiet) {
     try { await icuRebuild(E.addDays(t, -60), E.addDays(t, -1), byDay); } catch (e) {}
     Object.keys(byDay).forEach(d => {
       const p = S.plans[d];
-      if (p && !p.rest && (p.status === 'planned' || (p.status === 'skipped' && d === t)) && byDay[d].some(a => a.sport !== 'strength' && a.min >= 15)) { p.status = 'done'; p.via = 'icu'; delete p.altExtra; }
+      if (p && !p.rest && (p.status === 'planned' || (p.status === 'skipped' && d === t)) && byDay[d].some(a => E.matchesPlan(a, p))) { p.status = 'done'; p.via = 'icu'; delete p.altExtra; }
     });
     S.icu.last = Date.now(); save();
     refreshToday(false);
@@ -304,7 +304,8 @@ async function icuRebuild(from, to, byDay) {
     if (!tp.sports.includes(sport)) sport = tp.sports[0];
     const secs = +(ev.moving_time || (ev.workout_doc && ev.workout_doc.duration) || 0);
     const dur = secs ? Math.round(secs / 300) * 5 : tp.dur[0];
-    const done = (byDay[d] || S.activities[d] || []).some(a => a.sport !== 'strength' && a.min >= 15);
+    const pd = { tid, sport, dur: Math.max(tp.dur[0], dur) };
+    const done = (byDay[d] || S.activities[d] || []).some(a => E.matchesPlan(a, pd));
     S.plans[d] = { date: d, tid, sport, level: tp.level, dur: Math.max(tp.dur[0], dur), status: done ? 'done' : 'planned', via: done ? 'icu' : undefined,
       pushed: true, rebuilt: true, v: ENGINE_V, opts: {}, reasons: ['Ricostruita da Intervals.icu'] };
     n++;
@@ -1264,11 +1265,14 @@ function renderDiario() {
     } else if (d < t && cfg.on) { title = 'Nessuna attività'; }
     // se c'è un'attività vera, il diario mostra quella (con la proposta di SMG tra parentesi)
     const real = acts.filter(a => a.sport !== 'strength' && a.min >= 10);
-    if (p && !p.rest && real.length) {
+    if (p && !p.rest && real.length && (p.status === 'done' || real.some(a => E.matchesPlan(a, p)))) {
       const a0 = real.slice().sort((a, b) => b.min - a.min)[0], tot = real.reduce((s2, y) => s2 + y.min, 0), lv = Math.max(...real.map(a => a.level));
       icon = sportIcon(a0.sport === 'other' ? 'road' : a0.sport); title = a0.name + (real.length > 1 ? ' + ' + (real.length - 1) : '');
       sub = (E.SPORTS[a0.sport] ? E.SPORTS[a0.sport].name + ' · ' : '') + fmtMin(tot) + ' · ' + E.LEVELS[lv] + ' · proposta: ' + (p.freeName || E.TEMPLATES[p.tid].name);
       stc = 'done'; stt = 'Fatta';
+    } else if (p && !p.rest && real.length) {
+      // attività che non chiudono la seduta (es. una camminata in un giorno di bici): si vedono comunque
+      sub += ' · fatto: ' + real.map(a => (E.SPORTS[a.sport] ? E.SPORTS[a.sport].name : a.name) + ' ' + fmtMin(a.min)).join(', ');
     }
     rows += '<button class="day' + (d === t ? ' today' : '') + '" data-day="' + d + '"><div class="dn"><small>' + GG[x.getDay()].slice(0, 3) + '</small><b>' + x.getDate() + '</b></div>' + icon +
       '<div class="info"><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></div>' + (stt ? '<span class="st ' + stc + '">' + stt + '</span>' : '') + '</button>';
@@ -1515,7 +1519,7 @@ const GUIDE = [
     <li><b>Sport</b> e <b>Tempo a disposizione</b>: imponi lo sport o la durata; il resto delle regole resta. Automatico torna alla proposta dell'app.</li>
     <li><b>Falla sui rulli</b>: la stessa seduta con obiettivi in watt per il Tacx. Se esiste solo all'aperto (fartlek, salite, settori, caccia alle salite…) sceglie tra 2-3 gemelle indoor dello stesso livello e stimolo simile, quella che non fai da più tempo: per esempio il Fartlek collinare diventa Sweet spot con strappi, Tempo a blocchi o Piramide di cadenza. Dopo puoi sempre toccare <b>Alternative</b>.</li>
     <li><b>Cadenza</b>: nelle sedute con una cadenza da tenere (SFR, giochi e piramide di cadenza, frullini) la cadenza arriva a MyWhoosh e al Fenix come obiettivo in rpm insieme ai watt; in SMG la vedi nel dettaglio della seduta. Di base arriva il valore centrale della fascia (SFR 50–60 → 55 rpm). Con <b>Cadenza come fascia</b> (Profilo, sotto Tacx e Stages) arriva la fascia intera: il Fenix la mostra, MyWhoosh no (provato il 24 ottobre), quindi di base resta spento. In ERG la cadenza la scegli tu: per andare più piano non serve un rapporto più duro, il Tacx aumenta la resistenza da solo.</li>
-    <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola. Con <b>Oggi salto</b> la seduta sparisce anche da Garmin e MyWhoosh, la settimana si riequilibra (una seduta dura saltata può tornare nei giorni dopo) e puoi scegliere un'alternativa breve di mobilità o forza leggera in base al tempo che hai. <b>Annulla</b> la rimette.</li>
+    <li><b>Fatta</b> / <b>Oggi salto</b>: se è collegato Intervals non serve segnarla, la riconosce da sola. La chiude solo un'attività compatibile: bici per una seduta in bici, corsa per una corsa, e almeno un terzo della durata prevista. Una camminata, un giro corto o una corsa nello stesso giorno restano nel diario e contano nel carico, ma non segnano fatta la seduta. Se l'hai accorciata molto, segnala tu con <b>Fatta</b>. Con <b>Oggi salto</b> la seduta sparisce anche da Garmin e MyWhoosh, la settimana si riequilibra (una seduta dura saltata può tornare nei giorni dopo) e puoi scegliere un'alternativa breve di mobilità o forza leggera in base al tempo che hai. <b>Annulla</b> la rimette.</li>
     <li><b>Dettaglio della seduta</b>: blocchi, durate, watt o battiti, cadenze.</li>
     <li><b>Decido io: amici, corsa o camminata</b>: scegli cosa fai (bici, gruppo su MyWhoosh, corsa o camminata), la durata e l'intensità: per bici e corsa "che aria tira" (tranquilla, mista, garosa), per la camminata "che passo" (passeggiata, camminata svelta, escursione con dislivello). La corsa c'è anche se è in pausa nel Profilo, con un avviso per il piede. Sul Fenix non arriva nessun allenamento strutturato: registri l'attività come sempre e SMG legge da Intervals com'è andata (camminate ed escursioni compaiono come Camminata).</li></ul>
     <p>Ogni modifica dopo l'invio sostituisce la seduta su Intervals, Garmin e MyWhoosh.</p>

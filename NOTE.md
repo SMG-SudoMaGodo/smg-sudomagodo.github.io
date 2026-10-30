@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 28 ottobre 2026 · versione app **1.23** · cache service worker `smg-org-v60`
+Aggiornate al 28 ottobre 2026 · versione app **1.24** · cache service worker `smg-org-v61`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -38,6 +38,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
   - intensità della camminata: passeggiata, svelta, escursione;
   - durata da 30';
   - sul Fenix non arriva nessun allenamento strutturato.
+- **Più attività nello stesso giorno** (v1.24): tutte registrate, nel diario e nei totali della settimana. La seduta prevista la chiude solo un'attività compatibile (`matchesPlan()` in `engine.js`): bici con bici, corsa con corsa (cammino e corsa anche con una camminata), camminata con camminata o corsa, e almeno un terzo della durata prevista. Le altre attività restano visibili ("fatto: Camminata 1h" nel diario, "Da Intervals oggi" in Oggi). Una seduta accorciata molto si segna a mano con Fatta.
 - **Cosa allena**: ogni seduta ha un `focus` (rec, fondo, tecnica, brio, tempo, ss, forza, soglia, vo2, sprint, test), mostrato con una frase (`FOCUS_INFO`).
 - **Libreria**: 44 sedute.
   - Bici: dal rigenerante a VO2max, 15/15, SFR, sweet spot lungo e con strappi, soglia lunga e con partenza forte, settori a soglia MTB, ripetute in salita…
@@ -200,6 +201,10 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
    - carico e CTL (36 il 28/10). D'inverno freddo, buio e maltempo limitano il volume: obiettivo realistico **tenerla stabile** (36–40), non per forza risalire. Guardare soprattutto i giorni lunghi del weekend;
    - sedute scartate;
    - eventuali varianti di struttura delle sedute;
+   - **Più attività nello stesso giorno, punti rimasti** (chiesto da Fabrizio il 30/10: es. bici la mattina e camminata veloce il pomeriggio; con la corsa di nuovo attiva anche corsa e bici nello stesso giorno):
+     - livello del giorno: oggi è quello dell'attività più dura (`dayInfo()`); calcolarlo anche sul **carico totale** della giornata (≥100 media, ≥140 dura);
+     - RPE e sensazione presi dall'attività principale (più lunga o più dura), non dalla prima che li ha;
+     - `context().runsWeek` conta un giorno di corsa solo se la corsa è l'attività principale: deve contare ogni giorno con una corsa, prima che riparta la corsa (limiti per il piede);
    - **SFR in MTB** (in sospeso, decisione di Fabrizio del 30/10). Il 30/10, SFR in MTB 122': 68% del tempo in Z2 cardio, RPE 3. Cause: niente sensore di cadenza in MTB (i 50–60 rpm non compaiono sul Fenix), FC che a cadenza bassa sottostima lo sforzo, ritardo della FC nei blocchi. Zone Intervals corrette (soglia bici 155). Fabrizio è bradicardico, ma le zone partono dalla soglia misurata, quindi non va cambiato niente. In zona pochi posti adatti alle SFR in MTB. Idee da valutare: nota "conta 8–10 giri in 10 secondi" sulle SFR all'aperto; guidarle con RPE e cadenza invece che con la FC; preferire le SFR sui rulli (il Tacx dà la cadenza).
 
    Poi tarare i pesi dei temi prima del blocco soglia (dal 23/11). Fino ad allora **non cambiare il motore**, per non confondere l'analisi.

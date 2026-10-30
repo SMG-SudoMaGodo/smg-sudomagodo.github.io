@@ -667,6 +667,18 @@ function readiness(checkins, date) {
 /* ------------------------------------------------------------------ */
 // Un giorno passato conta solo se c'è un'attività registrata (da Intervals) o se la seduta è stata segnata come fatta.
 // assume: data la cui seduta pianificata si considera fatta (per l'anteprima di domani).
+// Un'attività registrata chiude la seduta prevista solo se è compatibile: stessa famiglia di sport
+// (bici con bici, corsa con corsa, camminata con camminata o corsa) e almeno un terzo della durata prevista.
+// Così una camminata o un giro corto nello stesso giorno restano nel diario senza segnare fatta la seduta.
+function matchesPlan(a, p) {
+  if (!a || !p || p.rest || a.sport === 'strength' || !(a.min >= 15)) return false;
+  if (a.min < Math.round((p.dur || 0) / 3)) return false;
+  if (BIKE.includes(p.sport)) return BIKE.includes(a.sport);
+  if (p.sport === 'run') return a.sport === 'run' || (a.sport === 'walk' && p.tid === 'run_walk');
+  if (p.sport === 'walk') return a.sport === 'walk' || a.sport === 'run';
+  return a.sport === p.sport;
+}
+
 function dayInfo(state, d, assume) {
   const p = state.plans[d]; const pv = p && !p.rest && p.tid ? p : null;
   const acts = ((state.activities || {})[d] || []).filter(a => a.sport !== 'strength' && (a.min == null || a.min >= 15));
@@ -674,7 +686,7 @@ function dayInfo(state, d, assume) {
     const main = acts.slice().sort((a, b) => (b.level || 2) - (a.level || 2))[0];
     const sp = main.sport === 'other' ? 'road' : main.sport;
     const rated = acts.filter(a => a.rpe || a.feel);
-    return { level: Math.max(...acts.map(a => a.level || 2)), sport: sp, tid: pv && pv.status !== 'skipped' ? pv.tid : null, done: true,
+    return { level: Math.max(...acts.map(a => a.level || 2)), sport: sp, tid: pv && pv.status === 'done' ? pv.tid : null, done: true,
              rpe: rated.length ? rated[0].rpe || null : null, feel: rated.length ? rated[0].feel || null : null };
   }
   if (pv && (pv.status === 'done' || d === assume)) return { level: pv.level, sport: pv.sport, tid: pv.tid, done: true, rpe: pv.rpe || null, feel: null };
@@ -1285,6 +1297,6 @@ root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
   defaultProfile, profileFor, indoorCap, blockTheme, THEMES, TR_W, GREEN, readiness, propose, alternatives, FOCUS_INFO, indoorVersion, build, stats, profileBars, targetText,
-  toIcu, icuEvent, activitySport, activityLevel, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
+  toIcu, icuEvent, activitySport, activityLevel, matchesPlan, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
 };
 })(typeof window !== 'undefined' ? window : globalThis);
