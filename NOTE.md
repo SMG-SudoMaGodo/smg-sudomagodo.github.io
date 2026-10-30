@@ -199,7 +199,8 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
    - effetto del semaforo e dei temi;
    - carico e CTL (36 il 28/10). D'inverno freddo, buio e maltempo limitano il volume: obiettivo realistico **tenerla stabile** (36–40), non per forza risalire. Guardare soprattutto i giorni lunghi del weekend;
    - sedute scartate;
-   - eventuali varianti di struttura delle sedute.
+   - eventuali varianti di struttura delle sedute;
+   - **SFR in MTB** (in sospeso, decisione di Fabrizio del 30/10). Il 30/10, SFR in MTB 122': 68% del tempo in Z2 cardio, RPE 3. Cause: niente sensore di cadenza in MTB (i 50–60 rpm non compaiono sul Fenix), FC che a cadenza bassa sottostima lo sforzo, ritardo della FC nei blocchi. Zone Intervals corrette (soglia bici 155). Fabrizio è bradicardico, ma le zone partono dalla soglia misurata, quindi non va cambiato niente. In zona pochi posti adatti alle SFR in MTB. Idee da valutare: nota "conta 8–10 giri in 10 secondi" sulle SFR all'aperto; guidarle con RPE e cadenza invece che con la FC; preferire le SFR sui rulli (il Tacx dà la cadenza).
 
    Poi tarare i pesi dei temi prima del blocco soglia (dal 23/11). Fino ad allora **non cambiare il motore**, per non confondere l'analisi.
 3. **Prossimo test FTP**: con le regole attuali verso metà-fine dicembre (≥6 settimane, prima settimana dopo uno scarico). Se si sente molto più in forma prima, "Anticipa".
