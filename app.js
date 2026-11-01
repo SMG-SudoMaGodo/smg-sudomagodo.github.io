@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.24';
+const APP_V = '1.25';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -723,7 +723,9 @@ async function icuAct(path) {
 }
 const hms = s => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? h + 'h' + String(m).padStart(2, '0') : m + "'" + String(x).padStart(2, '0') + '"'; };
 const n1 = v => String(Math.round(v * 10) / 10).replace('.', ',');
-function streamSVG(data, color, label, unit, fmt) {
+// passo al km da una velocità in m/s (es. 1,83 → 9:06/km)
+const paceTxt = v => { if (!(v > 0)) return '—'; const t = Math.round(1000 / v); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0') + '/km'; };
+function streamSVG(data, color, label, unit, fmt, maxLab) {
   const v = (data || []).filter(x => x != null && !isNaN(x));
   if (v.length < 10) return '';
   const N = 240, step = Math.max(1, Math.floor(data.length / N)), pts = [];
@@ -731,7 +733,7 @@ function streamSVG(data, color, label, unit, fmt) {
   let mn = Math.min(...pts), mx = Math.max(...pts); if (mx - mn < 1) mx = mn + 1;
   const W = 600, H = 90, path = pts.map((y, i) => (i ? 'L' : 'M') + (i / (pts.length - 1) * W).toFixed(1) + ' ' + (H - 4 - (y - mn) / (mx - mn) * (H - 8)).toFixed(1)).join('');
   const avg = v.reduce((a, b) => a + b, 0) / v.length;
-  return '<div class="strm"><div class="sh"><b>' + label + '</b><span>media ' + (fmt ? fmt(avg) : Math.round(avg)) + unit + ' · max ' + (fmt ? fmt(Math.max(...v)) : Math.round(Math.max(...v))) + unit + '</span></div>' +
+  return '<div class="strm"><div class="sh"><b>' + label + '</b><span>media ' + (fmt ? fmt(avg) : Math.round(avg)) + unit + ' · ' + (maxLab || 'max') + ' ' + (fmt ? fmt(Math.max(...v)) : Math.round(Math.max(...v))) + unit + '</span></div>' +
     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"><path d="' + path + ' L' + W + ' ' + H + ' L0 ' + H + 'Z" fill="' + color + '" opacity=".14"/><path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></div>';
 }
 function zonesHTML(title, secs, names, colors) {
@@ -754,7 +756,9 @@ async function openActSheet(id) {
   add(hms(a.moving_time || a.elapsed_time), 'tempo in movimento');
   if (a.distance > 100) add(n1(a.distance / 1000) + ' km', 'distanza');
   if (a.total_elevation_gain > 5) add(Math.round(a.total_elevation_gain) + ' m', 'dislivello');
-  if (a.average_speed > 0.5 && a.distance > 100) add(sp === 'run' ? (() => { const s2 = 1000 / a.average_speed; return Math.floor(s2 / 60) + ':' + String(Math.round(s2 % 60)).padStart(2, '0') + '/km'; })() : n1(a.average_speed * 3.6) + ' km/h', sp === 'run' ? 'passo medio' : 'velocità media');
+  // a piedi (corsa e camminata): passo al km e cadenza in passi al minuto
+  const foot = sp === 'run' || sp === 'walk';
+  if (a.average_speed > 0.5 && a.distance > 100) add(foot ? paceTxt(a.average_speed) : n1(a.average_speed * 3.6) + ' km/h', foot ? 'passo medio' : 'velocità media');
   const aw = a.icu_average_watts || a.average_watts, np = a.icu_weighted_avg_watts || a.weighted_average_watts;
   if (aw) add(Math.round(aw) + ' W', 'potenza media');
   if (np) add(Math.round(np) + ' W', 'potenza normalizzata');
@@ -763,7 +767,9 @@ async function openActSheet(id) {
   if (a.icu_training_load) add(Math.round(a.icu_training_load), 'carico');
   if (a.average_heartrate) add(Math.round(a.average_heartrate) + '', 'FC media');
   if (a.max_heartrate) add(Math.round(a.max_heartrate) + '', 'FC max');
-  if (a.average_cadence) add(Math.round(a.average_cadence) + '', sp === 'run' ? 'cadenza (passi/min)' : 'cadenza (rpm)');
+  // Garmin registra la cadenza a piedi per una gamba sola (es. 61 = 122 passi/min): si raddoppia se il valore è da una gamba
+  const cadK = foot && a.average_cadence && a.average_cadence < (sp === 'run' ? 120 : 80) ? 2 : 1;
+  if (a.average_cadence) add(Math.round(a.average_cadence * cadK) + '', foot ? 'cadenza (passi/min)' : 'cadenza (rpm)');
   if (a.calories) add(Math.round(a.calories) + '', 'kcal');
   if (np && aw) add(String((np / aw).toFixed(2)).replace('.', ','), 'variabilità (VI)');
   if (a.icu_efficiency_factor) add(String((+a.icu_efficiency_factor).toFixed(2)).replace('.', ','), 'efficienza (NP/FC)');
@@ -772,8 +778,11 @@ async function openActSheet(id) {
   if (rpe) add(rpe + '/10', 'sforzo percepito');
   if (feel) add(['', 'Ottima', 'Buona', 'Normale', 'Scarsa', 'Pessima'][feel] || feel, 'sensazione');
   const get = t => { const x = (st || []).find(y => y.type === t); return x && x.data; };
-  const charts = streamSVG(get('watts'), '#FFC940', 'Potenza', ' W') + streamSVG(get('heartrate'), '#FF6A8E', 'Frequenza cardiaca', ' bpm') +
-    streamSVG(get('altitude'), '#7BD88F', 'Altitudine', ' m') + streamSVG(get('cadence'), '#3FD4FF', 'Cadenza', '');
+  // a piedi: passo (dalla velocità, più in alto = più veloce; soste escluse) e cadenza in passi/min senza gli zeri delle soste
+  const vel = foot && get('velocity_smooth') ? get('velocity_smooth').map(v => v != null && v >= 0.5 ? v : null) : null;
+  const cad = get('cadence'), cadF = cad && foot ? cad.map(c => c ? c * cadK : null) : cad;
+  const charts = (vel ? streamSVG(vel, '#2DB4F2', 'Passo', '', paceTxt, 'più veloce') : '') + streamSVG(get('watts'), '#FFC940', 'Potenza', ' W') + streamSVG(get('heartrate'), '#FF6A8E', 'Frequenza cardiaca', ' bpm') +
+    streamSVG(get('altitude'), '#7BD88F', 'Altitudine', ' m') + streamSVG(cadF, '#3FD4FF', 'Cadenza', foot ? ' passi/min' : ' rpm');
   let zones = '';
   const hz = a.icu_hr_zone_times; if (Array.isArray(hz) && hz.length) zones += zonesHTML('Tempo nelle zone cardio', hz.map(Number), hz.map((_, i) => 'Z' + (i + 1)), ['#5E6A82', '#3FD4FF', '#C4FF45', '#FFC940', '#FF6A3D', '#FF3D6E', '#D24BFF']);
   const pz = a.icu_zone_times; if (Array.isArray(pz) && pz.length) { const pz2 = pz.filter(z => z && z.id && z.id !== 'SS'); zones += zonesHTML('Tempo nelle zone di potenza', pz2.map(z => +z.secs || 0), pz2.map(z => z.id), ['#5E6A82', '#3FD4FF', '#C4FF45', '#FFC940', '#FF6A3D', '#FF3D6E', '#D24BFF', '#D24BFF']); }
@@ -1547,7 +1556,7 @@ const GUIDE = [
     <li><b>Pollini</b>: il pallino prende il polline messo peggio tra graminacee, betulla, ontano, olivo, artemisia e ambrosia (media della giornata, previsione CAMS Europa). Classi della rete italiana POLLnet: <span style="color:#4ADE80">●</span> assenti, <span style="color:#FACC15">●</span> bassi, <span style="color:#FB923C">●</span> medi, <span style="color:#F87171">●</span> alti; grigio = fuori stagione. Tocca il pallino per il dettaglio di ogni polline. Cipresso, nocciolo, ortica e altri non sono previsti: per quelli c'è il bollettino ARPA.</li>
     <li><b>Buio</b>: se all'ora in cui esci è già buio, la bici da strada non viene proposta e di solito si va sui rulli. La MTB con le luci arriva ogni tanto, solo con tempo asciutto, poco vento e almeno 5 gradi; puoi sempre sceglierla tu dal chip Sport. Se parti col sole ma rientri dopo il tramonto, te lo ricorda: porta le luci.</li></ul>`],
   ['cal', 'Diario e grafico', `<ul><li>Settimana per settimana: sedute, tempo, carico, sedute dure. Quando da Intervals arriva l'attività vera, il diario mostra quella (nome, sport, durata, livello) con accanto la proposta di SMG. Tocca un giorno passato per vedere cosa hai fatto e la seduta proposta, o per segnarla.</li>
-    <li><b>Dettaglio dell'attività</b>: tocca un'attività (in Oggi o nel giorno del diario) per vedere tutte le statistiche registrate: tempo, distanza, dislivello, velocità, potenza media e normalizzata, intensità, carico, FC media e massima, cadenza, calorie, efficienza, deriva cardiaca, sforzo percepito; poi i grafici di potenza, FC, altitudine e cadenza e il tempo nelle zone. I dati arrivano da Intervals.icu al momento, quindi serve la connessione; in fondo c'è il collegamento per aprirla su Intervals.</li>
+    <li><b>Dettaglio dell'attività</b>: tocca un'attività (in Oggi o nel giorno del diario) per vedere tutte le statistiche registrate: tempo, distanza, dislivello, velocità (per corsa e camminata il passo al km), potenza media e normalizzata, intensità, carico, FC media e massima, cadenza (a piedi in passi al minuto), calorie, efficienza, deriva cardiaca, sforzo percepito; poi i grafici di passo (a piedi), potenza, FC, altitudine e cadenza e il tempo nelle zone. I dati arrivano da Intervals.icu al momento, quindi serve la connessione; in fondo c'è il collegamento per aprirla su Intervals.</li>
     <li><b>Andamento della forma</b>: fitness (azzurro) e fatica (rosa) delle ultime 8 settimane. Se la fitness sale, stai migliorando. Tocca il grafico per i valori del giorno.</li></ul>`],
   ['link', 'Intervals, Garmin, MyWhoosh', `<ul><li><b>SMG → Intervals → Garmin Connect → Fenix ed Edge</b>; e <b>Intervals → MyWhoosh</b> per le sedute indoor.</li>
     <li>Da Garmin a Intervals arrivano attività, sonno, HRV, FC a riposo e peso. FTP e soglie no.</li>

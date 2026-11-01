@@ -1162,10 +1162,15 @@ function indoorVersion(plan, profile, state) {
 /* ------------------------------------------------------------------ */
 /* Costruzione e numeri della seduta                                   */
 /* ------------------------------------------------------------------ */
+// intensità (IF) stimata delle uscite "Decido io": camminata secondo il passo scelto, il resto secondo l'aria che tira
+const FREE_IF_WALK = { stroll: 0.40, brisk: 0.47, hike: 0.55 }, FREE_IF = { 1: 0.55, 2: 0.65, 3: 0.75, 4: 0.85 };
+function freeIF(plan) { return plan.sport === 'walk' ? FREE_IF_WALK[plan.freeFeel] || 0.47 : FREE_IF[plan.level] || 0.7; }
 function build(plan, profile) {
   const t = TEMPLATES[plan.tid];
   const r = rng(hash(plan.date + '|' + plan.tid + '|' + plan.dur));
   const sections = t.build(plan.dur, plan.sport, r).filter(s => s.steps.length && secLen(s) > 0);
+  // "Decido io": il carico stimato segue l'intensità scelta, non la zona generica "a sensazione"
+  if (plan.free) { const ifx = freeIF(plan); sections.forEach(s => s.steps.forEach(x => { x.ifx = ifx; })); }
   // se la seduta supera la durata (arrotondamenti), accorcia il defaticamento
   return sections;
 }
@@ -1195,7 +1200,7 @@ function stats(sections, sport, P) {
   let sec = 0, tss = 0;
   sections.forEach(s => s.steps.forEach(x => {
     const Z = ZONES[x.z]; const t = x.d * s.rep; sec += t;
-    const IF = Math.min(1.3, ((Z.p[0] + Z.p[1]) / 2) / 100) * (x.z === 'Z7' ? 0.8 : 1);
+    const IF = x.ifx || Math.min(1.3, ((Z.p[0] + Z.p[1]) / 2) / 100) * (x.z === 'Z7' ? 0.8 : 1);
     tss += (t / 3600) * IF * IF * 100;
   }));
   return { min: Math.round(sec / 60), tss: Math.round(tss) };
