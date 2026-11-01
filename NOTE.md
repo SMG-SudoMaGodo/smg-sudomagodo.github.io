@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 28 ottobre 2026 · versione app **1.24** · cache service worker `smg-org-v61`
+Aggiornate al 28 ottobre 2026 · versione app **1.25** · cache service worker `smg-org-v62`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -33,7 +33,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
   - **Falla sui rulli**: per le sedute solo all'aperto ci sono 2–3 gemelle indoor (`INDOOR_EQ`); si sceglie quella fatta meno di recente;
   - Invia, Fatta, Oggi salto (con alternativa breve di forza o mobilità);
   - **Decido io: amici, corsa o camminata**.
-- **Decido io**:
+- **Decido io** (carico stimato dalla v1.25 secondo l'intensità scelta, `freeIF()`: camminata 0,40/0,47/0,55, bici e corsa 0,55–0,85 per livello; prima usava la zona "a sensazione" e una camminata di 2h risultava 144, contro un carico reale di 32):
   - sport: bici del profilo, gruppo su MyWhoosh, **corsa** (anche se in pausa, con avviso per il piede) e **camminata** (sport `walk`);
   - intensità della camminata: passeggiata, svelta, escursione;
   - durata da 30';
@@ -117,6 +117,8 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
   - **sincronizzazione**: all'apertura, ogni 2' finché la seduta di oggi non è fatta, poi ogni 10';
   - **invio**: manda la seduta come evento `smg-AAAA-MM-GG`, che arriva a Garmin (Fenix, Edge) e a MyWhoosh. La cadenza parte come valore singolo (es. `55rpm`). Con "Cadenza come fascia" parte la fascia, ma la legge solo il Fenix.
 - **Dettaglio attività** da Intervals (`/activity/{id}`, `/streams.json`): numeri, grafici e zone. Le attività arrivate da Strava non si leggono (403).
+  - **A piedi (corsa e camminata, v1.25)**: passo medio al km invece della velocità; grafico del **passo** (da `velocity_smooth`, soste sotto 0,5 m/s escluse, più in alto = più veloce); cadenza in **passi/min**. Garmin registra la cadenza a piedi per una gamba sola (camminata del 1/11: 61 → 122 passi/min): si raddoppia se è sotto 80 (camminata) o 120 (corsa). Gli zeri delle soste sono tolti dal grafico della cadenza.
+  - Da valutare quando riprende la corsa: zone di passo e passo corretto per la pendenza (GAP), se Intervals li dà nell'attività.
 
 ---
 
