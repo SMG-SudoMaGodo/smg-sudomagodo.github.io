@@ -118,7 +118,9 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
   - **invio**: manda la seduta come evento `smg-AAAA-MM-GG`, che arriva a Garmin (Fenix, Edge) e a MyWhoosh. La cadenza parte come valore singolo (es. `55rpm`). Con "Cadenza come fascia" parte la fascia, ma la legge solo il Fenix.
 - **Dettaglio attività** da Intervals (`/activity/{id}`, `/streams.json`): numeri, grafici e zone. Le attività arrivate da Strava non si leggono (403).
   - **A piedi (corsa e camminata, v1.25)**: passo medio al km invece della velocità; grafico del **passo** (da `velocity_smooth`, soste sotto 0,5 m/s escluse, più in alto = più veloce); cadenza in **passi/min**. Garmin registra la cadenza a piedi per una gamba sola (camminata del 1/11: 61 → 122 passi/min): si raddoppia se è sotto 80 (camminata) o 120 (corsa). Gli zeri delle soste sono tolti dal grafico della cadenza.
-  - Da valutare quando riprende la corsa: zone di passo e passo corretto per la pendenza (GAP), se Intervals li dà nell'attività.
+  - **Da fare prima che riprenda la corsa** (Fabrizio, 1/11: "saranno molto importanti"; percorsi in zona quasi sempre collinari, quasi mai piatti):
+    - nel dettaglio attività: zone di passo e **passo corretto per la pendenza (GAP)**, verificando quali campi dà Intervals;
+    - negli obiettivi delle sedute: oggi le corse facili (Z1, Z2, cammino) hanno obiettivi di FC, che vanno bene in collina; dal ritmo tempo in su l'obiettivo è il **passo** (`icuTarget()`), che in salita e in discesa non regge (il Fenix segnala sempre fuori zona). Valutare FC o RPE per le sedute di qualità in collina, oppure il passo solo per le ripetute in salita o su tratti piani noti.
 
 ---
 
