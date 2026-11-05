@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 28 ottobre 2026 · versione app **1.25** · cache service worker `smg-org-v62`
+Aggiornate al 28 ottobre 2026 · versione app **1.26** · cache service worker `smg-org-v63`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -116,6 +116,7 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
     - FTP, FC di soglia **bici** (Ride → `lthr`) e **corsa** (Run → `lthrRun`), passo di soglia, peso;
   - **sincronizzazione**: all'apertura, ogni 2' finché la seduta di oggi non è fatta, poi ogni 10';
   - **invio**: manda la seduta come evento `smg-AAAA-MM-GG`, che arriva a Garmin (Fenix, Edge) e a MyWhoosh. La cadenza parte come valore singolo (es. `55rpm`). Con "Cadenza come fascia" parte la fascia, ma la legge solo il Fenix.
+- **Dati della notte la mattina** (v1.26, segnalato da Fabrizio il 5/11: doveva sempre premere Aggiorna). Prima SMG sincronizzava solo all'apertura, al massimo ogni 10', e non ricontrollava ad app aperta: se l'apriva prima che Garmin avesse passato HRV e sonno a Intervals, restavano vuoti. Ora `nightWaiting()`: dalle 4 a mezzogiorno, prima del check-in, finché mancano HRV o sonno di oggi da Intervals, ricontrolla **ogni minuto ad app aperta** (massimo 40 volte al giorno) e mostra "In attesa dei dati della notte". Il check-in tiene la **bozza** (`ciDraft`: faccina, malanno, dolori, campi scritti a mano) quando la schermata si ridisegna. La Training Readiness non arriva da Intervals, si scrive a mano.
 - **Dettaglio attività** da Intervals (`/activity/{id}`, `/streams.json`): numeri, grafici e zone. Le attività arrivate da Strava non si leggono (403).
   - **A piedi (corsa e camminata, v1.25)**: passo medio al km invece della velocità; grafico del **passo** (da `velocity_smooth`, soste sotto 0,5 m/s escluse, più in alto = più veloce); cadenza in **passi/min**. Garmin registra la cadenza a piedi per una gamba sola (camminata del 1/11: 61 → 122 passi/min): si raddoppia se è sotto 80 (camminata) o 120 (corsa). Gli zeri delle soste sono tolti dal grafico della cadenza.
   - **Da fare prima che riprenda la corsa** (Fabrizio, 1/11: "saranno molto importanti"; percorsi in zona quasi sempre collinari, quasi mai piatti):

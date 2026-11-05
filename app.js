@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.25';
+const APP_V = '1.26';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -523,9 +523,18 @@ function extraHTML(id, d) {
     '<button class="btn sm ' + (done ? 'lime' : '') + '" id="aExtra" data-x="' + id + '" style="margin-top:10px">' + ico('check') + (done ? 'Fatto' : 'Segna come fatto') + '</button></div>';
 }
 
+// bozza del check-in: quando la schermata si ridisegna (es. arrivano i dati della notte) si tiene quello che hai già scelto o scritto
+let ciDraft = null;
+function grabCI() {
+  if (!document.getElementById('ciGo')) return;
+  const sel = document.querySelector('[data-feel].on'), ill = document.querySelector('[data-ill].on'), pain = document.getElementById('ci_pain');
+  const vals = {}; ['hrv', 'rhr', 'sleep', 'garmin'].forEach(k => { const el = document.getElementById('ci_' + k); if (el && el.dataset.typed) vals[k] = el.value; });
+  ciDraft = { feel: sel ? +sel.dataset.feel : null, ill: ill ? ill.dataset.ill : null, pain: pain ? pain.checked : null, vals };
+}
 function checkinHTML(d) {
-  const c = S.checkins[d] || {}; const src = c.src || {};
-  const f = (k, lab, unit, ph) => '<div class="field"><label>' + lab + '</label><div class="unit"><input inputmode="decimal" id="ci_' + k + '" value="' + (c[k] != null ? esc(c[k]) : '') + '" placeholder="' + ph + '"' +
+  const c0 = S.checkins[d] || {}; const src = c0.src || {}; const dr = d === today() && ciDraft;
+  const c = dr ? Object.assign({}, c0, dr.feel != null ? { feel: dr.feel } : {}, dr.ill != null ? { ill: dr.ill || null } : {}, dr.pain != null ? { pain: dr.pain } : {}, dr.vals) : c0;
+  const f = (k, lab, unit, ph) => '<div class="field"><label>' + lab + '</label><div class="unit"><input inputmode="decimal" id="ci_' + k + '" value="' + (c[k] != null ? esc(c[k]) : '') + '" placeholder="' + ph + '"' + (dr && dr.vals && k in dr.vals ? ' data-typed="1"' : '') +
     (src[k] === 'icu' ? ' style="border-color:rgba(196,255,69,.5)"' : '') + '><span>' + unit + '</span></div></div>';
   const fromIcu = Object.values(src).includes('icu');
   const icuNote = icuOn() && !fromIcu && diagText() ? '<div class="src" style="color:var(--t2)">' + ico('link') + esc(diagText()) + '</div>' : '';
@@ -533,6 +542,7 @@ function checkinHTML(d) {
   return '<div class="card"><h3>Check-in del mattino<span class="sp"></span>' + (editCI ? '<button class="btn ghost sm" id="ciCancel" style="padding:0 4px">Chiudi</button>' : '') + '</h3>' +
     '<div class="feel">' + labels.map((l, i) => '<button data-feel="' + (i + 1) + '"' + (+c.feel === i + 1 ? ' class="on"' : '') + '>' + face(i + 1) + l + '</button>').join('') + '</div>' +
     (fromIcu ? '<div class="src">' + ico('link') + 'Valori dal Fenix via Intervals.icu</div>' : icuNote) +
+    (nightWaiting() ? '<div class="src" style="color:var(--t2)">' + ico('sync', 'spin') + 'In attesa dei dati della notte: SMG ricontrolla Intervals ogni minuto finché l\'app è aperta</div>' : '') +
     '<div class="grid2">' + f('hrv', 'HRV notturna', 'ms', 'es. 62') + f('rhr', 'FC a riposo', 'bpm', 'es. 46') +
     f('sleep', 'Punteggio sonno', '/100', 'es. 78') + f('garmin', 'Training Readiness', '/100', 'facoltativo') + '</div>' +
     '<label class="check"><span class="switch"><input type="checkbox" id="ci_pain"' + (c.pain ? ' checked' : '') + '><i></i></span>Qualche dolore o acciacco oggi</label>' +
@@ -1123,6 +1133,7 @@ function bindOggi(p) {
   on('bkNow', () => { exportBackup(); render(); });
   on('bkLater', () => { S.backupSnooze = Date.now() + 7 * 86400e3; save(); render(); });
   document.querySelectorAll('[data-ill]').forEach(b => b.onclick = () => document.querySelectorAll('[data-ill]').forEach(x => x.classList.toggle('on', x === b)));
+  ['hrv', 'rhr', 'sleep', 'garmin'].forEach(k => { const el = document.getElementById('ci_' + k); if (el) el.oninput = () => { el.dataset.typed = 1; }; });
   document.querySelectorAll('[data-feel]').forEach(b => b.onclick = () => {
     document.querySelectorAll('[data-feel]').forEach(x => x.classList.toggle('on', x === b));
   });
@@ -1142,12 +1153,12 @@ function bindOggi(p) {
     const r0 = E.readiness(Object.assign({}, S.checkins, { [d]: c }), d) || {};
     c.snap = { at: Date.now(), score: r0.score, light: r0.light };
     SNAPK.forEach(k => { c.snap[k] = c[k] == null || c[k] === '' ? null : +c[k]; });
-    S.checkins[d] = c; leaveEdit(); save();
+    S.checkins[d] = c; ciDraft = null; leaveEdit(); save();
     const cur = S.plans[d]; const nl = (E.readiness(S.checkins, d) || {}).light;
     refreshToday(!!(cur && cur.status === 'planned' && cur.lightUsed && (cur.lightUsed !== nl || (cur.illUsed || null) !== (c.ill || null)))); render(); window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   on('ciEdit', () => { editCI = true; history.pushState({ view: 'oggi', edit: 1 }, ''); render(); });
-  on('ciCancel', () => { leaveEdit(); render(); });
+  on('ciCancel', () => { ciDraft = null; leaveEdit(); render(); });
   document.querySelectorAll('[data-sport]').forEach(b => b.onclick = () => setOpts((o, pp) => { logChoice('sport', pp, { to: b.dataset.sport || 'auto' }); o.forceSport = b.dataset.sport || undefined; o.forceTid = undefined; o.picked = undefined; o.reroll = 0; o.exclude = []; }));
   document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => setOpts((o, pp) => { logChoice('dur', pp, { to: b.dataset.dur ? +b.dataset.dur : 'auto' }); o.forceDur = b.dataset.dur ? +b.dataset.dur : undefined; }));
   on('aIndoor', () => {
@@ -1509,7 +1520,7 @@ const GUIDE = [
   ['check', 'Ogni mattina', `<ol><li>Apri SMG: scarica da solo HRV, FC a riposo, sonno, peso e le attività di ieri da Intervals.icu.</li>
     <li>Tocca la faccina che ti rappresenta e premi <b>Calcola il semaforo</b>. Se hai un acciacco, attiva l'interruttore.</li>
     <li>La seduta parte da sola verso Intervals e arriva su Fenix, Edge e MyWhoosh. Per non aspettare, apri Garmin Connect.</li></ol>
-    <p>Se i campi della notte sono vuoti, l'orologio non ha ancora sincronizzato: apri Garmin Connect, poi riapri SMG o premi Aggiorna nel Profilo. Va bene anche la sola faccina.</p>`],
+    <p>Se i campi della notte sono vuoti, l'orologio non ha ancora sincronizzato: apri Garmin Connect e lascialo sincronizzare. Poi torna su SMG: finché i dati mancano li ricontrolla da solo ogni minuto (fino a mezzogiorno) e li inserisce appena arrivano, senza perdere quello che hai già scelto. Va bene anche la sola faccina.</p>`],
   ['tl', 'Semaforo e indicatori', `<p><b>Verde</b>: via libera, anche sedute dure. <b>Arancione</b>: al massimo ritmo medio. <b>Rosso</b>: solo recupero; con un punteggio molto basso, riposo.</p>
     <p>Il punteggio unisce sensazione, HRV, FC a riposo, sonno, forma ed eventuali dolori.</p>
     <p><b>Come leggere i riquadri</b>: in alto il valore di stanotte, sotto il confronto in parole (verde se va bene, rosso se no), in basso l'andamento degli ultimi 7 giorni. La <b>linea tratteggiata</b> è il tuo riferimento: se la linea azzurra ci sta sopra o sotto, sei sopra o sotto il tuo solito. <b>Tocca un riquadro</b> per l'andamento a 14, 30 o 60 giorni, con media, minimo, massimo e il valore di ogni giorno (tocca o scorri sul grafico).</p>
@@ -1968,6 +1979,7 @@ history.replaceState({ view: 'oggi' }, '');
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => go(b.dataset.v));
 
 function render() {
+  grabCI();
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
   if (view === 'oggi') renderOggi(); else if (view === 'diario') renderDiario(); else renderProfilo();
 }
@@ -1983,12 +1995,25 @@ async function boot() {
   if (got) { const q = S.plans[d]; if (q && q.status === 'planned' && !q.lightUsed && !q.wxUsed && !(q.opts && Object.keys(q.opts).length)) refreshToday(true); render(); }
   // finché la seduta di oggi non risulta fatta si ricontrolla più spesso (l'attività arriva da Garmin dopo qualche minuto)
   const waiting = p && p.status === 'planned' && !p.rest;
-  if (icuOn() && Date.now() - (S.icu.last || 0) > (waiting ? 2 : 10) * 60e3) icuSync(true);
+  if (icuOn() && Date.now() - (S.icu.last || 0) > (nightWaiting() ? 1 : waiting ? 2 : 10) * 60e3) icuSync(true);
   void p;
 }
+// la mattina, prima del check-in, i dati della notte arrivano su Intervals qualche minuto dopo che il Fenix ha sincronizzato
+// con Garmin Connect: finché mancano HRV o sonno di oggi, a app aperta si ricontrolla ogni minuto (fino a mezzogiorno, max 40 volte)
+function nightWaiting() {
+  if (!icuOn()) return false;
+  const d = today(), h = new Date().getHours(), c = S.checkins[d] || {}, src = c.src || {};
+  if (h < 4 || h >= 12 || c.snap || (S.icu.nightTries || {})[d] >= 40) return false;
+  return !(src.hrv === 'icu' && src.sleep === 'icu');
+}
+setInterval(() => {
+  if (document.visibilityState !== 'visible' || busy.sync || !nightWaiting() || Date.now() - (S.icu.last || 0) < 55e3) return;
+  const d = today(); S.icu.nightTries = { [d]: ((S.icu.nightTries || {})[d] || 0) + 1 };
+  icuSync(true);
+}, 60e3);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  if (today() !== lastDay) { lastDay = today(); editCI = false; }
+  if (today() !== lastDay) { lastDay = today(); editCI = false; ciDraft = null; }
   boot();
 });
 boot();
