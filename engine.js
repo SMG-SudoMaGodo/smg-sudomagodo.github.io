@@ -683,13 +683,20 @@ function dayInfo(state, d, assume) {
   const p = state.plans[d]; const pv = p && !p.rest && p.tid ? p : null;
   const acts = ((state.activities || {})[d] || []).filter(a => a.sport !== 'strength' && (a.min == null || a.min >= 15));
   if (acts.length) {
-    const main = acts.slice().sort((a, b) => (b.level || 2) - (a.level || 2))[0];
+    // attività principale: la più dura, a pari livello la più lunga
+    const byWeight = (a, b) => ((b.level || 2) - (a.level || 2)) || ((b.min || 0) - (a.min || 0));
+    const sorted = acts.slice().sort(byWeight), main = sorted[0];
     const sp = main.sport === 'other' ? 'road' : main.sport;
-    const rated = acts.filter(a => a.rpe || a.feel);
-    return { level: Math.max(...acts.map(a => a.level || 2)), sport: sp, tid: pv && pv.status === 'done' ? pv.tid : null, done: true,
-             rpe: rated.length ? rated[0].rpe || null : null, feel: rated.length ? rated[0].feel || null : null };
+    // più attività nello stesso giorno: il livello tiene conto anche del carico totale (stesse soglie delle uscite lunghissime)
+    const load = acts.reduce((x, a) => x + (+a.load || 0), 0);
+    const level = Math.max(...acts.map(a => a.level || 2), acts.length > 1 ? (load >= 140 ? 4 : load >= 100 ? 3 : 0) : 0);
+    // RPE e sensazione dall'attività principale (o dalla più importante tra quelle che li hanno)
+    const rated = sorted.find(a => a.rpe || a.feel);
+    return { level, sport: sp, tid: pv && pv.status === 'done' ? pv.tid : null, done: true,
+             run: acts.some(a => a.sport === 'run'), rpeLvl: rated ? rated.level || 2 : null,
+             rpe: rated ? rated.rpe || null : null, feel: rated ? rated.feel || null : null };
   }
-  if (pv && (pv.status === 'done' || d === assume)) return { level: pv.level, sport: pv.sport, tid: pv.tid, done: true, rpe: pv.rpe || null, feel: null };
+  if (pv && (pv.status === 'done' || d === assume)) return { level: pv.level, sport: pv.sport, tid: pv.tid, done: true, run: pv.sport === 'run', rpe: pv.rpe || null, feel: null };
   return null;
 }
 
@@ -699,7 +706,7 @@ function feedback(state, date, assume) {
   const deltas = [], feels = [];
   for (let k = 1; k <= 14 && (deltas.length < 4 || feels.length < 4); k++) {
     const i = dayInfo(state, addDays(date, -k), assume); if (!i) continue;
-    if (i.rpe && deltas.length < 4) deltas.push(+i.rpe - RPE_EXP[i.level || 2]);
+    if (i.rpe && deltas.length < 4) deltas.push(+i.rpe - RPE_EXP[i.rpeLvl || i.level || 2]);   // confronto col livello dell'attività che ha l'RPE
     if (i.feel && feels.length < 4) feels.push(+i.feel);
   }
   const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
@@ -712,7 +719,7 @@ function context(state, date, assume) {
   for (let d = mon; d < date; d = addDays(d, 1)) {
     const i = dayInfo(state, d, assume); if (!i) continue;
     if (i.level >= 4) ctx.weekHard++;
-    if (i.sport === 'run') ctx.runsWeek++;
+    if (i.run || i.sport === 'run') ctx.runsWeek++;   // ogni giorno con una corsa, anche se non è l'attività principale
     if (dow(d) === 5 || dow(d) === 6) if (i.level >= 4) ctx.blockHard++;
   }
   for (let k = 1; k <= 21; k++) {
@@ -995,7 +1002,7 @@ function propose(state, date, opts) {
     if (ctx.recent[0] === s && ctx.recent[1] === s) x *= 0.5;
     if (s === 'run') {
       const stg = P.runStage || 1;
-      if (ctx.yesterday && ctx.yesterday.sport === 'run') x = 0;
+      if (ctx.yesterday && (ctx.yesterday.run || ctx.yesterday.sport === 'run')) x = 0;
       if (ctx.runsWeek >= (stg < 3 ? 2 : 3)) x = 0;
       if (stg < 3) x *= 0.8;
     }
@@ -1302,6 +1309,6 @@ root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
   defaultProfile, profileFor, indoorCap, blockTheme, THEMES, TR_W, GREEN, readiness, propose, alternatives, FOCUS_INFO, indoorVersion, build, stats, profileBars, targetText,
-  toIcu, icuEvent, activitySport, activityLevel, matchesPlan, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
+  toIcu, icuEvent, activitySport, activityLevel, matchesPlan, dayInfo, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
 };
 })(typeof window !== 'undefined' ? window : globalThis);

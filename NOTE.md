@@ -1,6 +1,6 @@
 # SMG · Sudo Ma Godo — note per riprendere il lavoro
 
-Aggiornate al 28 ottobre 2026 · versione app **1.26** · cache service worker `smg-org-v63`
+Aggiornate al 28 ottobre 2026 · versione app **1.27** · cache service worker `smg-org-v64`
 
 App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo`, repo `smg-sudomagodo.github.io`).
 
@@ -196,26 +196,19 @@ App online: https://smg-sudomagodo.github.io/ (GitHub Pages, org `SMG-SudoMaGodo
 
 ## 3. Prossimi passi
 
-1. **Seguire il blocco forza e sweet spot** (26/10–15/11, poi scarico 16–22/11). Controllare che:
-   - il semaforo nuovo dia più verdi;
-   - arrivino SFR e sweet spot all'intensità giusta, con RPE 6–7 sullo sweet spot;
-   - nei weekend di pioggia i rulli arrivino a 90' con sedute medie.
-2. **Lunedì 16/11 (inizio scarico): seconda analisi del backup** del blocco forza (26/10–15/11). Promemoria impostato in chat. Così c'è tutta la settimana di scarico per tarare e pubblicare prima del blocco soglia. Da guardare:
-   - registro delle scelte, più ricco;
-   - effetto del semaforo e dei temi;
-   - carico e CTL (36 il 28/10). D'inverno freddo, buio e maltempo limitano il volume: obiettivo realistico **tenerla stabile** (36–40), non per forza risalire. Guardare soprattutto i giorni lunghi del weekend;
-   - sedute scartate;
-   - eventuali varianti di struttura delle sedute;
-   - **Più attività nello stesso giorno, punti rimasti** (chiesto da Fabrizio il 30/10: es. bici la mattina e camminata veloce il pomeriggio; con la corsa di nuovo attiva anche corsa e bici nello stesso giorno):
-     - livello del giorno: oggi è quello dell'attività più dura (`dayInfo()`); calcolarlo anche sul **carico totale** della giornata (≥100 media, ≥140 dura);
-     - RPE e sensazione presi dall'attività principale (più lunga o più dura), non dalla prima che li ha;
-     - `context().runsWeek` conta un giorno di corsa solo se la corsa è l'attività principale: deve contare ogni giorno con una corsa, prima che riparta la corsa (limiti per il piede);
+1. **Esito del blocco forza e sweet spot (26/10–15/11), analisi del 16/11**:
+   - CTL da 36,6 a **43,0** (massimo da quando usa SMG); carico settimanale 380 · 341 · 397; tutte le sedute previste fatte, nessuna saltata;
+   - semaforo 18 verdi, 3 gialli, 0 rossi (nelle 3 settimane prima: 6, 13, 3). I gialli arrivano nei giorni giusti: **non toccarlo**;
+   - drop out degli Stages risolti col Fenix vicino alle pedivelle (quelli del 15/11 cadono nei cambi di rapporto);
+   - registro delle scelte: 4 MTB lunghe portate sui rulli (buio, meteo, impegni), 3 domeniche su 4 camminate con "Decido io", nessuna seduta scartata;
+   - **RPE molto bassi** (scala 1–10 di Intervals): test FTP 5, soglia classica e over-under 4, SFR 2–3. Fabrizio conferma che usa la scala 1–10 e che nessuna seduta gli è sembrata dura. Conclusione: **FTP probabilmente sottostimata** (il test del 26/10 non era a tutta: 237 W medi a RPE 5; FC media 123 in SFR a 165 W). La regola `feedback().easy` ("alziamo l'asticella") era corretta: **non tararla sull'RPE personale**, nasconderebbe il segnale. La "sensazione" è sempre 3: non informativa;
+   - pesi dei temi: mix del blocco buono (SFR ×3, tempo con cadenza ×2, soglia, over-under, piramide, sweet spot con strappi, fondi). Nessuna modifica.
+2. **Test FTP anticipato a lunedì 23/11** (inizio blocco soglia, fresco dopo lo scarico): Fabrizio preme "Anticipa: prima possibile" nel Profilo. Questa volta a tutta (RPE 9–10 alla fine). Dopo il test: rifare il confronto Tacx/Stages sulla stessa seduta e aggiornare MyWhoosh.
+   - Prima del test, pubblicato il 16/11 nella **v1.27: più attività nello stesso giorno**. `dayInfo()`: livello del giorno = massimo tra le attività e il carico totale con le soglie delle uscite lunghissime (≥100 media, ≥140 dura, solo con più attività); RPE e sensazione dall'attività principale (più dura, poi più lunga) e confronto col suo livello (`rpeLvl`); `run` vero se c'è una corsa, usato da `runsWeek` e dalla regola "niente corsa due giorni di fila". Verificato sul backup del 16/11: nessun giorno e nessuna proposta cambiano.
+3. **Da valutare dopo il test** (non prima):
    - **Funzioni di AI** (chiesto da Fabrizio il 2/11, da valutare). Confronto con IntervalCoach: lì c'è un coach in chat, un commento dopo ogni seduta e un piano a ritroso da una gara; SMG è tutto a regole, senza AI. Decisione di principio: **la scelta della seduta resta a regole** (prevedibile, si capisce e si corregge); l'AI solo come commentatore. Primo passo proposto: **commento automatico dopo ogni attività** (seduta prevista contro fatta, cosa ne tiene conto SMG). Poi eventualmente riepilogo della settimana e domanda libera. Chiave dell'AI solo sul telefono come quella di Intervals (repository pubblico); costo stimato pochi centesimi al mese;
-   - **Garmin Personal API** (segnalato da Fabrizio il 4/11, da valutare con le funzioni di AI). Dal 21/10/2026 Garmin dà a ogni utente una chiave personale gratuita per i propri dati: attività (JSON e FIT) e salute (riepiloghi giornalieri, sonno, FC, benessere). È **solo lettura**: non manda sedute all'orologio, quindi Intervals resta necessario. La chiave dura al massimo un anno e va scambiata ogni 24 ore con un token, lato server. Non è un collegamento ufficiale per Claude (i connettori per le chat sono progetti di terzi). Per SMG l'utilità concreta sarebbe **compilare da sola la Training Readiness** nel check-in (oggi si scrive a mano), se il dato è esposto. Da verificare: quali campi ci sono davvero e se si può chiamare dal browser (SMG non ha un server; servirebbe forse un piccolo intermediario). HRV, FC a riposo e sonno arrivano già da Intervals;
-   - **SFR in MTB** (in sospeso, decisione di Fabrizio del 30/10). Il 30/10, SFR in MTB 122': 68% del tempo in Z2 cardio, RPE 3. Cause: niente sensore di cadenza in MTB (i 50–60 rpm non compaiono sul Fenix), FC che a cadenza bassa sottostima lo sforzo, ritardo della FC nei blocchi. Zone Intervals corrette (soglia bici 155). Fabrizio è bradicardico, ma le zone partono dalla soglia misurata, quindi non va cambiato niente. In zona pochi posti adatti alle SFR in MTB. Idee da valutare: nota "conta 8–10 giri in 10 secondi" sulle SFR all'aperto; guidarle con RPE e cadenza invece che con la FC; preferire le SFR sui rulli (il Tacx dà la cadenza).
-
-   Poi tarare i pesi dei temi prima del blocco soglia (dal 23/11). Fino ad allora **non cambiare il motore**, per non confondere l'analisi.
-3. **Prossimo test FTP**: con le regole attuali verso metà-fine dicembre (≥6 settimane, prima settimana dopo uno scarico). Se si sente molto più in forma prima, "Anticipa".
+   - **Garmin Personal API** (segnalato da Fabrizio il 4/11; il 16/11 deciso di **rimandare**: serve un server per il token e l'unico vantaggio è la Training Readiness automatica). Dal 21/10/2026 Garmin dà a ogni utente una chiave personale gratuita per i propri dati: attività (JSON e FIT) e salute (riepiloghi giornalieri, sonno, FC, benessere). È **solo lettura**: non manda sedute all'orologio, quindi Intervals resta necessario. La chiave dura al massimo un anno e va scambiata ogni 24 ore con un token, lato server. Non è un collegamento ufficiale per Claude (i connettori per le chat sono progetti di terzi). Per SMG l'utilità concreta sarebbe **compilare da sola la Training Readiness** nel check-in (oggi si scrive a mano), se il dato è esposto. Da verificare: quali campi ci sono davvero e se si può chiamare dal browser (SMG non ha un server; servirebbe forse un piccolo intermediario). HRV, FC a riposo e sonno arrivano già da Intervals;
+   - **SFR in MTB** (in sospeso; dal blocco forza risulta che quasi sempre le sposta sui rulli, quindi priorità bassa: al massimo la nota sulla cadenza). Il 30/10, SFR in MTB 122': 68% del tempo in Z2 cardio, RPE 3. Cause: niente sensore di cadenza in MTB (i 50–60 rpm non compaiono sul Fenix), FC che a cadenza bassa sottostima lo sforzo, ritardo della FC nei blocchi. Zone Intervals corrette (soglia bici 155). Fabrizio è bradicardico, ma le zone partono dalla soglia misurata, quindi non va cambiato niente. In zona pochi posti adatti alle SFR in MTB. Idee da valutare: nota "conta 8–10 giri in 10 secondi" sulle SFR all'aperto; guidarle con RPE e cadenza invece che con la FC; preferire le SFR sui rulli (il Tacx dà la cadenza).
 4. **Quando riprende la corsa** (ora ferma per la fascite): riattivarla nel Profilo con la fase 1, impostare i tempi della progressione di rientro e controllare i limiti di FC delle corse facili (si basano sulla soglia della corsa, 164).
 5. **Idee in attesa** (solo se servono): varianti di struttura nelle sedute principali; file .zwo per MyWhoosh se un giorno servisse la fascia di cadenza (oggi non serve).
    - **Preparazione a una gara** (lista dei desideri, Fabrizio 11/11: niente in calendario, ma gli piacerebbe fare qualcosa nel 2027, in bici o corsa/trail). Partire dal minimo utile: evento in calendario (data, tipo, durata o distanza e dislivello) e **scarico finale** di 7–10 giorni; poi, se serve, blocchi costruiti a ritroso dalla data, sedute specifiche (granfondo: lunghi e salite a ritmo gara; trail: salite, discese, lunghi a piedi) e consigli per il giorno della gara. Corsa e trail solo dopo la fascite e il lavoro su GAP e obiettivi in collina. Da riprendere quando c'è un evento in vista.
