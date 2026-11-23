@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.27';
+const APP_V = '1.28';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1062,7 +1062,7 @@ function recapHTML() {
   if (S.profile.sports.strength) notes.push('Forza e mobilità: ' + sx + ' su 2' + (sx >= 2 ? ', ottimo.' : sx === 1 ? ', ne manca una.' : ': questa settimana ritagliati due sessioni brevi.'));
   if (dFit != null) notes.push(dFit > 0 ? 'Fitness in crescita (+' + dFit + ').' : dFit < 0 ? 'Fitness in calo (' + dFit + '): normale dopo una settimana leggera o di scarico.' : 'Fitness stabile.');
   const bw = E.blockWeek(S.profile, mon);
-  const next = bw === 3 ? 'Questa settimana è di <b>scarico</b>: sedute più corte e leggere, per assorbire il lavoro fatto.' : 'Questa settimana: <b>costruzione ' + (bw + 1) + '/3</b>' + (bw === 0 ? ', si riparte dopo lo scarico.' : ', un gradino in più.') ;
+  const next = bw === 3 ? 'Questa settimana è di <b>scarico</b>: sedute più corte, una sola media e il resto facile, per assorbire il lavoro fatto.' : 'Questa settimana: <b>costruzione ' + (bw + 1) + '/3</b>' + (bw === 0 ? ', si riparte dopo lo scarico.' : ', un gradino in più.') ;
   const z = E.parse(prev), y = E.parse(sun);
   const range = z.getDate() + (z.getMonth() !== y.getMonth() ? ' ' + MM[z.getMonth()].slice(0, 3) : '') + '–' + y.getDate() + ' ' + MM[y.getMonth()].slice(0, 3);
   const cmp = (x, y2) => y2 == null || x === y2 ? '' : '<small style="display:block;color:' + (x > y2 ? 'var(--green)' : 'var(--mut)') + ';font-size:11px">' + (x > y2 ? '▲' : '▼') + ' vs prima</small>';
@@ -1556,7 +1556,7 @@ const GUIDE = [
     <li><b>Test FTP</b>: lo propone nella prima settimana dopo lo scarico, quando sei fresco, se sono passate almeno 6 settimane dall'ultimo (oltre 9 settimane anche in altre settimane, mai durante lo scarico). Solo con semaforo verde, di lunedì, mercoledì o sabato, sui rulli o con la bici da strada: sempre con gli <b>Stages</b>. Sui rulli il Tacx resta la sorgente primaria di MyWhoosh: i 20 minuti arrivano senza ERG (se non si spegne da solo, spegnilo tu) e fai fede ai watt degli Stages sul Fenix. Il giorno del test, sotto la seduta, <b>Istruzioni passo passo</b> spiega tutto: preparazione, partenza di Fenix e MyWhoosh, ritmo minuto per minuto (calcolato dall'FTP che ti aspetti) e cosa fare dopo. <b>Alternative</b> ti fa scegliere un'altra seduta dura (il test torna nei giorni successivi).</li>
     <li>Se le ultime sedute ti sono sembrate dure (fatica percepita sul Fenix), rallenta; se facili, alza l'asticella.</li></ul>
     <p>Le etichette sotto la seduta spiegano il perché della scelta. Nelle sedute oltre 90 minuti (75 di corsa) trovi anche le indicazioni di <b>rifornimento</b>, adattate al meteo.</p>`],
-  ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>, più leggera e corta. Nel Diario l'etichetta della settimana indica dove sei.</p>
+  ['stairs', 'Blocchi e progressione', `<p>Le settimane vanno a cicli di quattro: tre di <b>costruzione</b>, in cui durate e ripetute crescono un poco, e una di <b>scarico</b>: durate ridotte di circa un terzo, niente uscite lunghe vere e <b>una sola seduta media</b> (sweet spot, tempo, fartlek); fatta quella, il resto della settimana è fondo facile, tecnica o rigenerante. Nel Diario l'etichetta della settimana indica dove sei.</p>
     <p>Nel Profilo, in <b>Blocchi e scarico</b>, vedi quando arriva il prossimo scarico e puoi <b>anticiparlo</b>, <b>posticiparlo</b> o farlo partire <b>da questa settimana</b> (ferie, lavoro pesante, trasferte).</p>
     <p>Il <b>lunedì</b> (e il martedì, finché non lo chiudi) in cima a Oggi trovi il riepilogo della settimana appena chiusa: sedute, tempo, sedute dure, variazione della fitness e cosa ti aspetta.</p>`],
   ['cloud', 'Meteo, luce e domani', `<p>La scheda in alto mostra oggi e domani (con l'ora del tramonto), la seduta probabile di domani e, se piove, la finestra di 3 ore più asciutta. La proposta di domani si conferma col check-in del mattino. La località si imposta nel Profilo.</p>

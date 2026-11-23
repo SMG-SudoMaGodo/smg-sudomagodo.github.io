@@ -916,7 +916,13 @@ function propose(state, date, opts) {
 
   /* --- intensità massima --- */
   let maxL = light === 'green' ? 5 : light === 'yellow' ? (rd && rd.score >= 60 ? 3 : 2) : 1;
-  if (deload) { maxL = Math.min(maxL, 3); reasons.push('Settimana di scarico: si recupera per crescere'); }
+  if (deload) {
+    // scarico: una sola seduta media (livello 3) nella settimana, le altre facili
+    let med = 0;
+    for (let d = monday(date); d < date; d = addDays(d, 1)) { const i = dayInfo(state, d, opts.assumeDone); if (i && i.done && i.level >= 3) med++; }
+    maxL = Math.min(maxL, med ? 2 : 3);
+    reasons.push(med ? 'Settimana di scarico: la seduta media l\'hai già fatta, oggi si va facile' : 'Settimana di scarico: si recupera per crescere');
+  }
   if (ctx.yesterday && ctx.yesterday.level >= 4) { maxL = Math.min(maxL, 2); reasons.push('Ieri seduta dura: oggi si scarica'); }
   else if (ctx.yesterday && ctx.yesterday.level === 3 && ctx.twoAgo && ctx.twoAgo.level >= 3) maxL = Math.min(maxL, 2);
   if (ctx.weekHard >= 2) { maxL = Math.min(maxL, 3); if (maxL === 3) reasons.push('Già due sedute dure questa settimana'); }
@@ -1031,7 +1037,7 @@ function propose(state, date, opts) {
       let x = 1; const last = ctx.lastUse[t.id];
       if (last != null) x *= last <= 3 ? 0.05 : last <= 7 ? 0.25 : last <= 14 ? 0.6 : 1;
       if (t.test) x *= 20;
-      if (t.long && dayLong) x *= 1.3;
+      if (t.long && dayLong) x *= deload ? 0.02 : 1.3;   // in scarico niente lunghi veri
       x *= theme.w[t.focus] || 1;
       return [t, x];
     });
@@ -1052,7 +1058,8 @@ function propose(state, date, opts) {
   if (fb.easy && !deload) reasons.push('Le ultime sedute ti sono sembrate facili: alziamo un po\' l\'asticella');
   if (fb.tired) dur = round5(Math.max(tpl.dur[0], dur * 0.9));
   if (ci.ill === 'neck') dur = round5(Math.max(tpl.dur[0], dur * 0.8));
-  if (deload) dur = round5(Math.max(tpl.dur[0], dur * 0.75));
+  // scarico: durate ridotte di circa un terzo (le sedute facili possono scendere sotto il minimo del modello)
+  if (deload) dur = round5(Math.max(level <= 2 ? Math.min(tpl.dur[0], 45) : tpl.dur[0], dur * 0.65));
   if (opts.forceTid && tpl.id === opts.forceTid) reasons.push(opts.picked ? 'Scelta da te tra le alternative' : 'Versione rulli della seduta di oggi');
   if (opts.forceDur) dur = clamp(round5(opts.forceDur), tpl.dur[0], Math.max(tpl.dur[0], sport === 'indoor' ? Math.min(Math.max(opts.forceDur, 30), indoorCap(P, dayLong)) : opts.forceDur));
 
