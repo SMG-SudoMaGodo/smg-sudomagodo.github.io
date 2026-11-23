@@ -689,9 +689,11 @@ function dayInfo(state, d, assume) {
     const sp = main.sport === 'other' ? 'road' : main.sport;
     // più attività nello stesso giorno: il livello tiene conto anche del carico totale (stesse soglie delle uscite lunghissime)
     const load = acts.reduce((x, a) => x + (+a.load || 0), 0);
-    const level = Math.max(...acts.map(a => a.level || 2), acts.length > 1 ? (load >= 140 ? 4 : load >= 100 ? 3 : 0) : 0);
+    let level = Math.max(...acts.map(a => a.level || 2), acts.length > 1 ? (load >= 140 ? 4 : load >= 100 ? 3 : 0) : 0);
     // RPE e sensazione dall'attività principale (o dalla più importante tra quelle che li hanno)
     const rated = sorted.find(a => a.rpe || a.feel);
+    // test FTP fatto: è una seduta dura anche se riscaldamento e defaticamento abbassano l'intensità media dell'attività
+    if (pv && pv.status === 'done' && TEMPLATES[pv.tid] && TEMPLATES[pv.tid].test) level = Math.max(level, pv.level || 5);
     return { level, sport: sp, tid: pv && pv.status === 'done' ? pv.tid : null, done: true,
              run: acts.some(a => a.sport === 'run'), rpeLvl: rated ? rated.level || 2 : null,
              rpe: rated ? rated.rpe || null : null, feel: rated ? rated.feel || null : null };
@@ -705,7 +707,10 @@ const RPE_EXP = { 1: 2.5, 2: 4, 3: 5.5, 4: 7, 5: 8 };
 function feedback(state, date, assume) {
   const deltas = [], feels = [];
   for (let k = 1; k <= 14 && (deltas.length < 4 || feels.length < 4); k++) {
-    const i = dayInfo(state, addDays(date, -k), assume); if (!i) continue;
+    const d = addDays(date, -k);
+    // dopo un test FTP le sensazioni delle sedute fatte con le zone vecchie non contano più (test compreso)
+    if (state.profile && state.profile.lastTest && d <= state.profile.lastTest) break;
+    const i = dayInfo(state, d, assume); if (!i) continue;
     if (i.rpe && deltas.length < 4) deltas.push(+i.rpe - RPE_EXP[i.rpeLvl || i.level || 2]);   // confronto col livello dell'attività che ha l'RPE
     if (i.feel && feels.length < 4) feels.push(+i.feel);
   }
