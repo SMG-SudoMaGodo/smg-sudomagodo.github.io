@@ -1203,9 +1203,11 @@ function targetText(z, sport, P) {
   }
   if (tgt === 'pace') {
     if (z === 'WALK') return 'Cammino';
-    if (z === 'Z1' || z === 'Z2') return '< ' + Math.round((P.lthrRun || P.lthr) * Z.hr[1] / 100) + ' bpm';   // FC di soglia della corsa
-    const f = p => { const s = Math.round(P.thrPace / (p / 100)); return Math.floor(s / 60) + ':' + pad(s % 60); };
-    return f(Z.pace[0]) + '–' + f(Z.pace[1]) + ' /km';
+    // corsa su percorsi collinari: niente passo (in salita e in discesa non vuol dire nulla), FC di soglia della corsa
+    const lt = P.lthrRun || P.lthr;
+    if (z === 'Z1' || z === 'Z2') return '< ' + Math.round(lt * Z.hr[1] / 100) + ' bpm';
+    if (RUN_RPE[z]) return 'RPE ' + Z.rpe;              // ripetute brevi: la FC non fa in tempo a salire
+    return Math.round(lt * Z.hr[0] / 100) + '–' + Math.round(lt * Z.hr[1] / 100) + ' bpm · RPE ' + Z.rpe;
   }
   return '';
 }
@@ -1240,9 +1242,11 @@ function icuTarget(z, sport) {
   const Z = ZONES[z]; const tgt = SPORTS[sport].target;
   if (tgt === 'power') return Z.p[0] + '-' + Z.p[1] + '%';
   if (tgt === 'hr') return Z.hr[0] + '-' + Z.hr[1] + '% LTHR';
-  if (z === 'WALK' || z === 'Z1' || z === 'Z2') return Z.hr[0] + '-' + Z.hr[1] + '% LTHR';
-  return Z.pace[0] + '-' + Z.pace[1] + '% Pace';
+  // corsa: sempre FC (% LTHR della corsa su Intervals); ripetute brevi e "a sensazione" senza obiettivo, si va a RPE
+  if (RUN_RPE[z] || z === 'MIX') return '';
+  return Z.hr[0] + '-' + Z.hr[1] + '% LTHR';
 }
+const RUN_RPE = { Z5: 1, Z6: 1, Z7: 1 };
 function cleanTxt(t) { return (t || '').replace(/[0-9%\-]/g, '').replace(/\s+/g, ' ').trim(); }
 
 function toIcu(plan, sections, profile) {
@@ -1250,7 +1254,7 @@ function toIcu(plan, sections, profile) {
   sections.forEach(s => {
     lines.push(s.rep > 1 ? cleanTxt(s.title) + ' ' + s.rep + 'x' : cleanTxt(s.title));
     s.steps.forEach(x => {
-      let l = '- ' + (x.txt ? cleanTxt(x.txt) + ' ' : '') + icuDur(x.d) + ' ' + (x.free && plan.sport === 'indoor' ? 'freeride' : icuTarget(x.z, plan.sport));
+      let l = ('- ' + (x.txt ? cleanTxt(x.txt) + ' ' : '') + icuDur(x.d) + ' ' + (x.free && plan.sport === 'indoor' ? 'freeride' : icuTarget(x.z, plan.sport))).trimEnd();
       // cadenza: di base valore singolo (centro della fascia, arrotondato a 5); con profile.cadRange la fascia intera (prova)
       if (x.cad && SPORTS[plan.sport].target === 'power') l += ' ' + (profile && profile.cadRange ? x.cad[0] + '-' + x.cad[1] : Math.round((x.cad[0] + x.cad[1]) / 10) * 5) + 'rpm';
       lines.push(l);
