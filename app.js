@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.31';
+const APP_V = '1.32';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -49,6 +49,7 @@ const I = {
   left: '<path d="m15 18-6-6 6-6"/>',
   right: '<path d="m9 18 6-6-6-6"/>',
   flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',
+  key: '<path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
   sync: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/>',
@@ -445,13 +446,16 @@ function openAltSheet(d, seed, inPlace) {
 function workoutHTML(p, ro) {
   const t = E.TEMPLATES[p.tid]; const sections = E.build(p, S.profile); const st = E.stats(sections, p.sport, S.profile);
   const sp = E.SPORTS[p.sport]; const col = SC[p.sport];
-  let h = '<div class="card wo"><div class="glow" style="background:radial-gradient(120% 100% at 0% 0%,' + col + ',transparent 70%)"></div><div class="top">' +
+  const key = E.isKey(p);
+  let h = '<div class="card wo' + (key ? ' key' : '') + '"><div class="glow" style="background:radial-gradient(120% 100% at 0% 0%,' + col + ',transparent 70%)"></div><div class="top">' +
     '<div class="meta">' + sportIcon(p.sport) + '<div><b>' + sp.name + '</b><small>' + sp.sub + '</small></div>' +
     '<div class="lvl">' + dots(p.level) + '<small>' + E.LEVELS[p.level] + '</small></div></div>' +
+    (key ? '<div class="keytag">' + ico('key') + 'Seduta chiave</div>' : '') +
     '<h2>' + esc(p.freeName || t.name) + '</h2>' +
     '<div class="big"><div><strong class="num">' + fmtMin(st.min) + '</strong>durata</div><div><strong class="num">' + st.tss + '</strong>carico stimato</div>' +
     (p.deload ? '<div><span class="tag">Scarico</span></div>' : '') + '</div>' + chartSVG(sections) + '</div><div class="body">' +
-    '<p class="desc">' + esc(t.desc) + '</p>' + focusHTML(t);
+    '<p class="desc">' + esc(t.desc) + '</p>' + focusHTML(t) +
+    (key && p.status !== 'done' ? '<div class="keynote">' + ico('key') + '<span>È una delle sedute che fanno crescere la forma: se il tempo è poco, accorcia il fondo degli altri giorni, non questa. Se il semaforo è rosso o stai male, invece, si salta senza rimorsi.</span></div>' : '');
   if (p.challenge) h += '<div class="challenge">' + ico('flag') + '<div><b>Sfida del giorno</b><span>' + esc(p.challenge) + '</span></div></div>';
   if (t.test && p.status !== 'done') { const G = testGuess();
     h += '<div class="challenge" style="background:rgba(45,180,242,.07);border-color:rgba(45,180,242,.4)">' + ico('flag') + '<div style="flex:1"><b style="color:var(--hot2)">Oggi c\'è il test FTP</b><span>' +
@@ -1206,7 +1210,7 @@ function bindOggi(p) {
 /* ------------------------------------------------------------------ */
 function dayDone(d) {
   const p = S.plans[d]; const acts = (S.activities[d] || []).filter(a => a.min >= 10);
-  if (acts.length) return { min: acts.reduce((a, b) => a + b.min, 0), load: acts.reduce((a, b) => a + (b.load || 0), 0), level: Math.max(...acts.map(a => a.level)) };
+  if (acts.length) { const di = E.dayInfo(S, d); return { min: acts.reduce((a, b) => a + b.min, 0), load: acts.reduce((a, b) => a + (b.load || 0), 0), level: Math.max(...acts.map(a => a.level), di ? di.level : 0) }; }
   if (p && !p.rest && p.status === 'done') { const st = E.stats(E.build(p, S.profile), p.sport, S.profile); return { min: st.min, load: st.tss, level: p.level }; }
   return null;
 }
@@ -1291,7 +1295,7 @@ function renderDiario() {
     // se c'è un'attività vera, il diario mostra quella (con la proposta di SMG tra parentesi)
     const real = acts.filter(a => a.sport !== 'strength' && a.min >= 10);
     if (p && !p.rest && real.length && (p.status === 'done' || real.some(a => E.matchesPlan(a, p)))) {
-      const a0 = real.slice().sort((a, b) => b.min - a.min)[0], tot = real.reduce((s2, y) => s2 + y.min, 0), lv = Math.max(...real.map(a => a.level));
+      const a0 = real.slice().sort((a, b) => b.min - a.min)[0], tot = real.reduce((s2, y) => s2 + y.min, 0), di = E.dayInfo(S, d), lv = Math.max(...real.map(a => a.level), di ? di.level : 0);
       icon = sportIcon(a0.sport === 'other' ? 'road' : a0.sport); title = a0.name + (real.length > 1 ? ' + ' + (real.length - 1) : '');
       sub = (E.SPORTS[a0.sport] ? E.SPORTS[a0.sport].name + ' · ' : '') + fmtMin(tot) + ' · ' + E.LEVELS[lv] + ' · proposta: ' + (p.freeName || E.TEMPLATES[p.tid].name);
       stc = 'done'; stt = 'Fatta';
@@ -1299,8 +1303,9 @@ function renderDiario() {
       // attività che non chiudono la seduta (es. una camminata in un giorno di bici): si vedono comunque
       sub += ' · fatto: ' + real.map(a => (E.SPORTS[a.sport] ? E.SPORTS[a.sport].name : a.name) + ' ' + fmtMin(a.min)).join(', ');
     }
-    rows += '<button class="day' + (d === t ? ' today' : '') + '" data-day="' + d + '"><div class="dn"><small>' + GG[x.getDay()].slice(0, 3) + '</small><b>' + x.getDate() + '</b></div>' + icon +
-      '<div class="info"><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></div>' + (stt ? '<span class="st ' + stc + '">' + stt + '</span>' : '') + '</button>';
+    const kd = p && E.isKey(p);
+    rows += '<button class="day' + (d === t ? ' today' : '') + (kd ? ' key' : '') + '" data-day="' + d + '"><div class="dn"><small>' + GG[x.getDay()].slice(0, 3) + '</small><b>' + x.getDate() + '</b></div>' + icon +
+      '<div class="info"><b>' + (kd ? '<span class="kstar" title="Seduta chiave">' + ico('key') + '</span>' : '') + esc(title) + '</b><small>' + esc(sub) + '</small></div>' + (stt ? '<span class="st ' + stc + '">' + stt + '</span>' : '') + '</button>';
   }
   // costanza: settimane consecutive con almeno 3 sedute
   let streak = 0;
@@ -1585,6 +1590,7 @@ const GUIDE = [
     <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Ogni fase ha le sue sedute: nella <b>corsa facile</b> fondo, fondo in crescendo, corsa nel verde (terreno morbido) e passo corto e veloce (cadenza alta, utile per il piede); nella <b>completa</b> anche andature e allunghi, progressivo, ripetute lunghe in sweet spot, salite brevi, soglia, piramide e VO2max. Tempi da concordare con chi ti segue.</li>
     <li><b>Obiettivi della corsa</b>: i percorsi sono collinari, quindi il passo non dice quanto stai spingendo. Le sedute di corsa usano la <b>FC di soglia della corsa</b>: fondo sotto un tetto di battiti, tempo, sweet spot e soglia in una fascia di battiti (con l'RPE accanto); le ripetute brevi e forti (VO2max, 30/30, salite brevi) vanno a <b>RPE</b>, perché il cuore non fa in tempo a salire, e sul Fenix arrivano senza obiettivo. Su Intervals tieni aggiornata la FC di soglia della corsa: è quella che il Fenix usa per le fasce.</li>
     <li><b>Avviare la seduta di corsa sul Fenix</b>: Start → Corsa, poi tieni premuto Menu → Allenamento → Allenamenti (o Calendario allenamenti) → la seduta SMG → <b>Esegui allenamento</b>, e solo allora Start. Prima del via in alto devi vedere il primo passo (per esempio "Corsa molto facile 8:00"); se no parte una corsa libera, senza avvisi né fine seduta. Meglio selezionarla all'aperto, subito prima di partire: se la schermata resta ferma a lungo l'orologio può tornare al quadrante e perdere la seduta.</li>
+    <li><b>Sedute chiave</b>: le sedute dure (livello Intenso e oltre), i test FTP e, nella settimana di scarico, l'unica seduta media hanno una stella gialla: in Oggi l'etichetta <b>Seduta chiave</b> e un bordo dorato, nel Diario la stella accanto al nome. Sono quelle da non saltare: se il tempo è poco si accorcia il fondo degli altri giorni. Col semaforo rosso o quando stai male si saltano comunque.</li>
     <li><b>Livello delle corse</b>: per decidere quanto è stata dura una corsa SMG guarda la frequenza cardiaca rispetto alla FC di soglia della corsa, non l'intensità di Intervals, che può venire dalla potenza stimata dal polso o da soglie di corsa vecchie.</li>
     <li><b>La tua settimana</b>: giorni attivi, giorni lunghi, durata massima e ora in cui esci di solito (serve per buio e meteo).</li>
     <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Apri <b>Esercizi</b>: sotto ogni esercizio c'è una riga su come si fa. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>

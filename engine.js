@@ -748,6 +748,12 @@ function blockWeek(profile, date) {
   return Math.max(0, 3 + w);
 }
 // la quarta settimana del blocco è di scarico
+// seduta chiave: quella da non saltare (dura, test, o l'unica media della settimana di scarico)
+function isKey(p) {
+  if (!p || p.rest || !p.tid || p.free) return false;
+  const t = TEMPLATES[p.tid];
+  return !!t && (!!t.test || p.level >= 4 || (!!p.deload && p.level >= 3));
+}
 function isDeload(profile, date) { return blockWeek(profile, date) === 3; }
 function nextDeload(profile, date) {
   let m = monday(date);
@@ -1329,6 +1335,6 @@ root.SMG = {
   ymd, parse, addDays, dow, monday, diffDays, hash, rng,
   SPORTS, ZONES, LEVELS, TEMPLATES, EXTRAS,
   defaultProfile, profileFor, indoorCap, blockTheme, THEMES, TR_W, GREEN, readiness, propose, alternatives, FOCUS_INFO, indoorVersion, build, stats, profileBars, targetText,
-  toIcu, icuEvent, activitySport, activityLevel, matchesPlan, dayInfo, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
+  toIcu, icuEvent, isKey, activitySport, activityLevel, matchesPlan, dayInfo, isDeload, context, hrvStatus, blockWeek, feedback, nextDeload, dayCfg, nextTest, startMin, daylight, slotWx, DEF_AT
 };
 })(typeof window !== 'undefined' ? window : globalThis);
