@@ -1301,8 +1301,12 @@ function activityLevel(a, P) {
   const h = (a.moving_time || a.elapsed_time || 0) / 3600;
   let IF = a.icu_intensity != null && +a.icu_intensity > 0 ? +a.icu_intensity : null;
   if (IF != null && IF > 3) IF = IF / 100;
+  // corsa con la FC: l'intensità di Intervals può venire dalla potenza stimata dal Fenix o da soglie di corsa vecchie,
+  // quindi conta la FC (sotto, rispetto alla soglia della corsa); carico e zone cardio restano
+  const runHr = activitySport(a.type) === 'run' && a.average_heartrate > 0 && h >= 0.33;
+  if (runHr) IF = null;
   // senza potenza: intensità stimata dal carico (che Intervals calcola dalla FC): carico/ora = 100 × IF²
-  if (IF == null && a.icu_training_load && h > 0.15) IF = Math.sqrt(a.icu_training_load / h / 100);
+  if (IF == null && !runHr && a.icu_training_load && h > 0.15) IF = Math.sqrt(a.icu_training_load / h / 100);
   let lvl = IF == null ? 2 : IF >= 0.9 ? 4 : IF >= 0.8 ? 3 : IF >= 0.6 ? 2 : 1;
   // tempo nelle zone cardio alte (zone Intervals: 4 = soglia, 5+ = sopra soglia)
   const z = a.icu_hr_zone_times;
@@ -1311,7 +1315,7 @@ function activityLevel(a, P) {
     if (z5 >= 360 || z4 + z5 >= 1200) lvl = Math.max(lvl, 4); else if (z4 + z5 >= 600) lvl = Math.max(lvl, 3);
   }
   // uscite lunghissime: anche a intensità bassa pesano sul recupero (carico Intervals)
-  const ld = +(a.icu_training_load || 0);
+  const ld = +(a.icu_training_load || 0) * (runHr ? 0.8 : 1);   // corsa: carico di Intervals probabilmente gonfiato, si sconta
   if (ld >= 140) lvl = Math.max(lvl, 4); else if (ld >= 100) lvl = Math.max(lvl, 3);
   const lt = P && (activitySport(a.type) === 'run' ? (P.lthrRun || P.lthr) : P.lthr);   // soglia della corsa per le corse, della bici per il resto
   if (a.average_heartrate && lt && h >= 0.33) {
