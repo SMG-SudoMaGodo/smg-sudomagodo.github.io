@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.37';
+const APP_V = '1.38';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1124,12 +1124,26 @@ const aiSetKey = k => { try { k ? localStorage.setItem(AIK, k) : localStorage.re
 const coachSt = () => (S.coach = S.coach || { model: 'sonnet', auto: true, a: {}, m: {}, qa: [] });
 const coachOn = () => !!aiKey();
 const coachBusy = new Set();
+const COACH_V = 2;   // versione delle istruzioni: cambiandola i commenti già fatti si rigenerano
 
 const COACH_SYS = `Sei il coach di Fabrizio dentro SMG – SudoMaGodo, la sua app personale di allenamento (bici da strada, MTB/gravel, rulli Tacx con MyWhoosh, corsa). Rispondi sempre in italiano, con tono diretto, concreto e amichevole, come un allenatore che lo conosce. Dai del tu.
 
 Come funziona SMG: ogni giorno propone una seduta con regole fisse (semaforo dal check-in con HRV, FC a riposo, sonno e sensazioni; blocchi di 4 settimane, 3 di costruzione e 1 di scarico; temi dei blocchi; sedute chiave = dure, test o l'unica media dello scarico). Tu NON scegli e NON cambi la seduta: commenti, spieghi e consigli. Se serve un cambio, indica gli strumenti dell'app: "Alternative" (stesso livello), "Decido io" (seduta libera), "Oggi salto", oppure accorciare la durata. Le sedute chiave non si saltano per mancanza di tempo (si accorcia il fondo degli altri giorni), ma si saltano col semaforo rosso o se sta male.
 
-Ripresa della corsa dopo una fascite plantare (ripresa il 20/11/2026), piano concordato: fino a metà dicembre 2 corse a settimana da 30-40 minuti facili; seconda metà di dicembre 2-3 corse, una fino a 45-50 minuti, qualche allungo breve; inizio gennaio test di corsa e poi fase completa (tempo, ripetute, salite), che decide lui con chi lo segue. Si sale di gradino solo se: i primi passi del mattino dopo non sono peggiori del solito, nessun fastidio che dura, almeno 2 settimane stabili. Se torna il fastidio: ferma una settimana al gradino o scendi. Mai due corse in giorni consecutivi; una corsa in più va al posto del fondo, non di una seduta chiave. Percorsi quasi sempre collinari: in salita conta la FC, non il passo. La FC di soglia della corsa (164) è vecchia e probabilmente troppo alta.
+Ripresa della corsa dopo una fascite plantare (ripresa il 20/11/2026). Piano concordato, da applicare alla lettera:
+- Fino a metà dicembre: 2 corse a settimana (lunedì-domenica), 30-40 minuti, facili (FC sotto il tetto del fondo, RPE 2-3), terreno morbido se possibile.
+- Seconda metà di dicembre, solo se i criteri sono rispettati: 2-3 corse, una fino a 45-50 minuti, qualche allungo breve.
+- Inizio gennaio: test di corsa, poi fase completa (tempo, ripetute, salite). Il passaggio lo decide lui nel Profilo, d'accordo con chi lo segue per la fascite.
+- Criteri per salire di gradino: i primi passi del mattino dopo ogni corsa non sono peggiori del solito, nessun fastidio che dura, almeno 2 settimane di fila stabili al gradino attuale.
+- Se torna un fastidio lieve: NON fermare la corsa; non si sale, si resta allo stesso gradino un'altra settimana oppure si torna al gradino precedente (meno corse o più corte). Fermare la corsa solo per dolore forte o che peggiora, zoppia, gonfiore o dolore a riposo (vedi Sicurezza).
+- Dove mettere una corsa: SMG propone le corse da solo nei giorni adatti. Una corsa in più rispetto alle proposte è facoltativa e va solo al posto di un giorno di fondo (di solito il fondo lungo della domenica, se ha poco tempo per la bici), MAI al posto di una seduta chiave o di una seduta media, MAI il giorno dopo un'altra corsa, mai in un giorno di riposo.
+Percorsi quasi sempre collinari: in salita conta la FC, non il passo. La FC di soglia della corsa (164) è vecchia e probabilmente troppo alta: si aggiorna col test di gennaio.
+
+Affidabilità, regole che non puoi violare:
+- Usa solo i dati che ti vengono dati. Le sedute dei prossimi giorni sono SOLO quelle dell'elenco "Prossimi giorni": non inventarne altre e non dire che un giorno c'è bici o corsa se l'elenco dice riposo.
+- Per contare le corse usa il conteggio per settimana (lunedì-domenica) che ti viene dato, non finestre mobili.
+- Non contraddire il piano di corsa e le regole di SMG qui sopra. Se un consiglio non è coperto da queste regole, dillo come proposta da valutare, non come regola.
+- Se non sai qualcosa, dillo in una frase invece di indovinare.
 
 Altre cose da sapere: è bradicardico; usa RPE da 1 a 10 in modo onesto (valori bassi = davvero facile); Garmin Fenix 8, pedali Stages sulla bici da strada. Le "sensazioni" delle attività vengono da Intervals con scala 1 = ottima, 5 = pessima; quella del check-in ha scala 1 = a pezzi, 5 = al top.
 
@@ -1153,6 +1167,23 @@ function coachCtx(d) {
     const at = ac.map(a => (E.SPORTS[a.sport] ? E.SPORTS[a.sport].name : a.sport) + ' "' + (a.name || '') + '" ' + a.min + '′, carico ' + Math.round(a.load || 0) + ', ' + (E.LEVELS[a.level] || '') + (a.rpe ? ', RPE ' + a.rpe : '') + (a.feel ? ', sensazione ' + a.feel + '/5' : '')).join(' + ');
     if (ci || pr || at) L.push(x + ' | ' + (ci || '-') + ' | ' + (pr || '-') + ' | ' + (at || '-'));
   }
+  // corse per settimana lunedì-domenica (quella in corso e la precedente)
+  const mon = E.monday(d), runs = (a0, a1) => { const r = []; for (let x = a0; x <= a1; x = E.addDays(x, 1)) (S.activities[x] || []).forEach(a => { if (a.sport === 'run' && a.min >= 10) r.push(x + ' ' + a.min + '′'); }); return r; };
+  const rw = runs(mon, d), rp = runs(E.addDays(mon, -7), E.addDays(mon, -1));
+  L.push('Corse questa settimana (dal ' + mon + '): ' + rw.length + (rw.length ? ' (' + rw.join(', ') + ')' : '') + '. Settimana precedente: ' + rp.length + (rp.length ? ' (' + rp.join(', ') + ')' : '') + '.');
+  // prossimi giorni: le proposte di SMG (provvisorie: cambiano col check-in e il meteo)
+  L.push('Prossimi giorni secondo SMG (proposte provvisorie, possono cambiare col check-in del mattino):');
+  // in sequenza, come se ogni proposta venisse fatta: così SMG non ripete la seduta dura due giorni di fila
+  const sim = Object.assign({}, S, { plans: Object.assign({}, S.plans) });
+  for (let k = 1; k <= 4; k++) {
+    const x = E.addDays(d, k); let p = S.plans[x];
+    if (!p || p.status !== 'planned' || !p.tid) { try { p = E.propose(sim, x, {}); } catch (e) { p = null; } }
+    if (p && !p.rest && p.tid) sim.plans[x] = Object.assign({}, p, { status: 'done' });
+    const lab = GG[E.parse(x).getDay()] + ' ' + x + ': ';
+    if (!p) L.push(lab + 'non disponibile');
+    else if (p.rest) L.push(lab + 'riposo' + (p.special === 'off' ? ' (impegno)' : ''));
+    else if (p.tid && E.TEMPLATES[p.tid]) L.push(lab + (p.freeName || E.TEMPLATES[p.tid].name) + ', ' + E.SPORTS[p.sport].name + ', ' + p.dur + '′, ' + E.LEVELS[p.level] + (E.isKey(p) ? ', SEDUTA CHIAVE' : ''));
+  }
   return L.join('\n');
 }
 
@@ -1174,7 +1205,7 @@ async function aiCall(user, maxTok, thinkOff) {
   try { r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', signal: ac ? ac.signal : undefined,
     headers: { 'content-type': 'application/json', 'x-api-key': aiKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify(Object.assign({ model: AI_MODELS[coachSt().model] || AI_MODELS.sonnet, max_tokens: Math.max(maxTok || 500, thinkOff ? 0 : 2500), system: COACH_SYS, messages: [{ role: 'user', content: user }] }, thinkOff ? { thinking: { type: 'disabled' } } : {}))
+    body: JSON.stringify(Object.assign({ model: AI_MODELS[coachSt().model] || AI_MODELS.sonnet, max_tokens: Math.max(maxTok || 500, thinkOff ? 0 : 2500), system: COACH_SYS, messages: [{ role: 'user', content: user }] }, thinkOff ? { thinking: { type: 'disabled' }, temperature: 0.3 } : {}))
   }); } catch (e) { clearTimeout(tm); const x = new Error(e && e.name === 'AbortError' ? 'timeout' : 'rete'); x.status = e && e.name === 'AbortError' ? 'timeout' : 0; throw x; }
   clearTimeout(tm);
   if (!r.ok) { let m = ''; try { m = ((await r.json()).error || {}).message || ''; } catch (e) {} const e = new Error(m || 'HTTP ' + r.status); e.status = r.status; throw e; }
@@ -1208,10 +1239,10 @@ function coachTxt(t) {
 const coachDayActs = x => (S.activities[x] || []).filter(a => a.sport !== 'strength' && a.min >= 15);
 // giorno con attività da commentare: oggi o ieri, se non già commentato (la chiave include gli id, così un'attività in più rifà il commento)
 function coachActDay(d) {
-  for (const x of [d, E.addDays(d, -1)]) { const ac = coachDayActs(x); if (ac.length) return { day: x, id: x + ':' + ac.map(a => a.id).join(',') }; }
+  for (const x of [d, E.addDays(d, -1)]) { const ac = coachDayActs(x); if (ac.length) return { day: x, id: COACH_V + ':' + x + ':' + ac.map(a => a.id).join(',') }; }
   return null;
 }
-function coachMornKey(d) { const c = S.checkins[d] || {}; return c.snap && (c.pain || c.note) ? d + ':' + (c.pain ? 1 : 0) + ':' + (c.note || '') : null; }
+function coachMornKey(d) { const c = S.checkins[d] || {}; return c.snap && (c.pain || c.note) ? COACH_V + ':' + d + ':' + (c.pain ? 1 : 0) + ':' + (c.note || '') : null; }
 
 function coachHTML(d) {
   if (!coachOn()) return '';
