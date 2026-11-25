@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.33';
+const APP_V = '1.34';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1157,17 +1157,29 @@ function coachCtx(d) {
 }
 
 async function aiAsk(user, maxTok) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
+  // limite di 60 secondi: se la rete o il servizio si bloccano, niente rotellina infinita
+  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null; const tm = ac ? setTimeout(() => ac.abort(), 60000) : 0;
+  let r;
+  try { r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', signal: ac ? ac.signal : undefined,
     headers: { 'content-type': 'application/json', 'x-api-key': aiKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
     body: JSON.stringify({ model: AI_MODELS[coachSt().model] || AI_MODELS.sonnet, max_tokens: maxTok || 500, system: COACH_SYS, messages: [{ role: 'user', content: user }] })
-  });
+  }); } catch (e) { clearTimeout(tm); const x = new Error(e && e.name === 'AbortError' ? 'timeout' : 'rete'); x.status = e && e.name === 'AbortError' ? 'timeout' : 0; throw x; }
+  clearTimeout(tm);
   if (!r.ok) { let m = ''; try { m = ((await r.json()).error || {}).message || ''; } catch (e) {} const e = new Error(m || 'HTTP ' + r.status); e.status = r.status; throw e; }
   const j = await r.json();
-  return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+  const t = (j.content || []).filter(c => c && c.type === 'text' && c.text).map(c => c.text).join('\n').trim();
+  if (!t) { const x = new Error('vuota: ' + (j.stop_reason || '?') + ' / ' + (j.content || []).map(c => c && c.type).join(',')); x.status = 'empty'; throw x; }
+  return t;
 }
+// freno ai consumi: al massimo 2 tentativi automatici per ogni commento in una sessione dell'app
+const coachTries = {};
+const coachCanTry = k => (coachTries[k] = (coachTries[k] || 0) + 1) <= 2;
 function aiErr(e) {
   const m = (e && e.message) || '';
+  if (e.status === 'empty') return 'Il coach ha risposto senza testo (' + esc(e.message) + '): segnalalo.';
+  if (e.status === 'timeout') return 'Il coach ci ha messo più di un minuto a rispondere: riprova.';
+  if (e.status === 0) return 'Non riesco a raggiungere il coach: controlla la connessione e riprova.';
   if (e.status === 401 || e.status === 403) return 'Chiave AI non valida o scaduta: creane una nuova su platform.claude.com e incollala nel Profilo.';
   if (/credit|balance|billing/i.test(m)) return 'Credito AI esaurito: ricaricalo su platform.claude.com.';
   if (e.status === 429) return 'Troppe richieste o limite di spesa raggiunto: riprova più tardi.';
@@ -1197,7 +1209,7 @@ function coachHTML(d) {
     const a = C.a[ad.id], lab = ad.day === d ? 'Com\'è andata oggi' : 'Com\'è andata ieri';
     if (a && a.t) parts.push('<div class="cblk"><small>' + lab + '</small>' + coachTxt(a.t) + '</div>');
     else if (a && a.err) parts.push('<div class="cblk"><small>' + lab + '</small><p class="mut">' + esc(a.err) + ' <button class="lnk" data-cretry="a">Riprova</button></p></div>');
-    else if (C.auto !== false) parts.push('<div class="cblk"><small>' + lab + '</small><p class="mut">' + ico('sync', 'spin') + ' Il coach sta guardando l\'attività…</p></div>');
+    else if (C.auto !== false && (coachBusy.has('a') || (coachTries['a:' + ad.id] || 0) < 2)) parts.push('<div class="cblk"><small>' + lab + '</small><p class="mut">' + ico('sync', 'spin') + ' Il coach sta guardando l\'attività…</p></div>');
     else parts.push('<div class="cblk"><small>' + lab + '</small><button class="btn sm" data-cretry="a">Chiedi il commento</button></div>');
   }
   const last = (C.qa || []).slice(-1)[0];
@@ -1227,7 +1239,7 @@ function coachFill(d, manual) {
   if (!coachOn() || !document.getElementById('coachCard')) return;
   const C = coachSt();
   const mk = coachMornKey(d);
-  if (mk && !(C.m[d] && C.m[d].k === mk && (C.m[d].t || C.m[d].err)) && !coachBusy.has('m')) {
+  if (mk && !(C.m[d] && C.m[d].k === mk && (C.m[d].t || C.m[d].err)) && !coachBusy.has('m') && (manual || coachCanTry('m:' + mk))) {
     const c = S.checkins[d] || {}; coachBusy.add('m');
     const ask = 'Check-in di stamattina: ' + (c.pain ? 'ha segnalato un dolore o acciacco. ' : '') + (c.note ? 'Nota: "' + c.note + '". ' : '') +
       'Seduta che SMG propone oggi: ' + coachToday(d) + '.\nDimmi come regolarmi oggi (seduta e, se riguarda il piede, la corsa rispetto al piano di ripresa). Se la nota non basta per capire, fammi una domanda precisa.';
@@ -1236,7 +1248,7 @@ function coachFill(d, manual) {
     return;
   }
   const ad = coachActDay(d);
-  if (ad && (C.auto !== false || manual) && !(C.a[ad.id] && (C.a[ad.id].t || C.a[ad.id].err)) && !coachBusy.has('a')) {
+  if (ad && (C.auto !== false || manual) && !(C.a[ad.id] && (C.a[ad.id].t || C.a[ad.id].err)) && !coachBusy.has('a') && (manual || coachCanTry('a:' + ad.id))) {
     coachBusy.add('a');
     const pl = S.plans[ad.day], acts = coachDayActs(ad.day);
     const ask = 'Commenta le attività di ' + (ad.day === d ? 'oggi' : 'ieri') + ' (' + ad.day + '): ' +
