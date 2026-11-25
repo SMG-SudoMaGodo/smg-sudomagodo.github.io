@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.35';
+const APP_V = '1.36';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1267,9 +1267,11 @@ function coachFill(d, manual) {
       });
   }
 }
+let coachTestRes = null;   // esito dell'ultima prova, mostrato nel Profilo (un avviso a scomparsa si perde facilmente)
 async function coachTest() {
-  try { const t = await aiAsk('Prova di collegamento da SMG: rispondi solo con una frase breve di saluto per Fabrizio.', 60); toast('Coach collegato: ' + t.slice(0, 80)); }
-  catch (e) { toast(aiErr(e)); }
+  const t0 = Date.now();
+  try { const t = await aiAsk('Prova di collegamento da SMG: rispondi solo con una frase breve di saluto per Fabrizio.', 60); coachTestRes = { ok: true, t: t.slice(0, 160), s: Math.round((Date.now() - t0) / 1000) }; }
+  catch (e) { coachTestRes = { ok: false, t: aiErr(e), s: Math.round((Date.now() - t0) / 1000) }; }
 }
 
 function renderOggi() {
@@ -1605,6 +1607,7 @@ function renderProfilo() {
       '<div class="field"><label>Chiave API Anthropic</label><input id="aiKey" type="password" value="' + esc(aiKey()) + '" placeholder="incolla qui (sk-ant-…)" autocomplete="off"></div>' +
       '<div class="set"><div class="l"><b>Modello</b><small>Sonnet ragiona meglio; Haiku costa circa un terzo</small></div><div class="v"><select id="aiModel"><option value="sonnet"' + (C.model !== 'haiku' ? ' selected' : '') + '>Sonnet</option><option value="haiku"' + (C.model === 'haiku' ? ' selected' : '') + '>Haiku</option></select></div></div>' +
       '<div class="set"><div class="l"><b>Commento automatico</b><small>Dopo ogni attività arrivata da Intervals</small></div>' + sw('aiAuto', C.auto !== false) + '</div>' +
+      (coachTestRes ? '<div class="keynote" style="margin:4px 0 8px;' + (coachTestRes.ok ? 'background:rgba(59,232,137,.08);border-color:rgba(59,232,137,.35)' : 'background:rgba(255,79,94,.08);border-color:rgba(255,79,94,.4)') + '"><span><b>' + (coachTestRes.ok ? 'Collegato' : 'Non collegato') + '</b> (' + coachTestRes.s + ' s): ' + esc(coachTestRes.t) + '</span></div>' : '') +
       '<div class="row" style="margin-top:6px"><button class="btn hot" id="aiSave">Salva e prova</button>' + (aiKey() ? '<button class="btn ghost" id="aiDel">Rimuovi chiave</button>' : '') + '</div></div>'; }
   h += '<div class="card"><h3>Meteo</h3><div class="set"><div class="l"><b>' + esc(S.loc ? S.loc.name : 'Nessuna località') + '</b><small>Con pioggia, freddo o buio nelle tue ore la proposta va sui rulli</small></div><button class="btn sm" id="lHere">' + ico('pin') + 'Qui</button></div>' +
     '<div class="row" style="margin-top:6px"><input id="lQ" placeholder="Cerca un comune…"><button class="btn" id="lFind" style="flex:none">Cerca</button></div><div class="results" id="lRes"></div>' + tripHTML() + '</div>';
@@ -1650,7 +1653,7 @@ function bindProfilo() {
     g('d_max_' + d).onchange = e => { c.max = +e.target.value; changed(); };
     g('d_at_' + d).onchange = e => { c.at = e.target.value; changed(); };
   });
-  g('aiSave').onclick = async () => { const k = g('aiKey').value.trim(); if (!k) { toast('Incolla la chiave API'); return; } aiSetKey(k); save(); toast('Provo il collegamento…'); await coachTest(); render(); };
+  g('aiSave').onclick = async () => { const k = g('aiKey').value.trim(); if (!k) { toast('Incolla la chiave API'); return; } aiSetKey(k); save(); coachTestRes = { ok: true, t: 'prova in corso…', s: 0 }; render(); await coachTest(); render(); };
   if (g('aiDel')) g('aiDel').onclick = () => { aiSetKey(''); toast('Chiave AI rimossa da questo telefono'); render(); };
   g('aiModel').onchange = e => { coachSt().model = e.target.value; save(); };
   g('aiAuto').onchange = e => { coachSt().auto = e.target.checked; save(); };
