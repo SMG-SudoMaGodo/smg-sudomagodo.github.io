@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.32';
+const APP_V = '1.33';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -43,6 +43,7 @@ const I = {
   walk: '<circle cx="12.5" cy="4.5" r="2"/><path d="M10 21l2-6 2.5 2.5V21M12 15l.5-5.5M12.5 9.5l3 2.5M12.5 9.5 9 12M18.5 10v11"/>',
   dice: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
   send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
+  coach: '<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   chev: '<path d="m6 9 6 6 6-6"/>',
@@ -533,11 +534,12 @@ function grabCI() {
   if (!document.getElementById('ciGo')) return;
   const sel = document.querySelector('[data-feel].on'), ill = document.querySelector('[data-ill].on'), pain = document.getElementById('ci_pain');
   const vals = {}; ['hrv', 'rhr', 'sleep', 'garmin'].forEach(k => { const el = document.getElementById('ci_' + k); if (el && el.dataset.typed) vals[k] = el.value; });
-  ciDraft = { feel: sel ? +sel.dataset.feel : null, ill: ill ? ill.dataset.ill : null, pain: pain ? pain.checked : null, vals };
+  const nt = document.getElementById('ci_note');
+  ciDraft = { feel: sel ? +sel.dataset.feel : null, ill: ill ? ill.dataset.ill : null, pain: pain ? pain.checked : null, note: nt ? nt.value : null, vals };
 }
 function checkinHTML(d) {
   const c0 = S.checkins[d] || {}; const src = c0.src || {}; const dr = d === today() && ciDraft;
-  const c = dr ? Object.assign({}, c0, dr.feel != null ? { feel: dr.feel } : {}, dr.ill != null ? { ill: dr.ill || null } : {}, dr.pain != null ? { pain: dr.pain } : {}, dr.vals) : c0;
+  const c = dr ? Object.assign({}, c0, dr.feel != null ? { feel: dr.feel } : {}, dr.ill != null ? { ill: dr.ill || null } : {}, dr.pain != null ? { pain: dr.pain } : {}, dr.note != null ? { note: dr.note } : {}, dr.vals) : c0;
   const f = (k, lab, unit, ph) => '<div class="field"><label>' + lab + '</label><div class="unit"><input inputmode="decimal" id="ci_' + k + '" value="' + (c[k] != null ? esc(c[k]) : '') + '" placeholder="' + ph + '"' + (dr && dr.vals && k in dr.vals ? ' data-typed="1"' : '') +
     (src[k] === 'icu' ? ' style="border-color:rgba(196,255,69,.5)"' : '') + '><span>' + unit + '</span></div></div>';
   const fromIcu = Object.values(src).includes('icu');
@@ -550,6 +552,7 @@ function checkinHTML(d) {
     '<div class="grid2">' + f('hrv', 'HRV notturna', 'ms', 'es. 62') + f('rhr', 'FC a riposo', 'bpm', 'es. 46') +
     f('sleep', 'Punteggio sonno', '/100', 'es. 78') + f('garmin', 'Training Readiness', '/100', 'facoltativo') + '</div>' +
     '<label class="check"><span class="switch"><input type="checkbox" id="ci_pain"' + (c.pain ? ' checked' : '') + '><i></i></span>Qualche dolore o acciacco oggi</label>' +
+    (coachOn() ? '<div class="field" style="margin:0 0 14px"><label>Nota per il coach (facoltativa)</label><input id="ci_note" maxlength="200" value="' + esc(c.note || '') + '" placeholder="es. piede un po\' rigido ai primi passi" autocomplete="off"></div>' : '') +
     '<div class="ctl" style="margin:0 0 14px"><div class="lab">Malanno</div><div class="chips" style="flex-wrap:wrap">' +
     [['', 'No'], ['neck', 'Raffreddore, gola'], ['body', 'Febbre, dolori diffusi']].map(([v, l]) => '<button class="chip' + ((c.ill || '') === v ? ' on' : '') + '" data-ill="' + v + '">' + l + '</button>').join('') + '</div></div>' +
     '<button class="btn hot full" id="ciGo">Calcola il semaforo</button></div>';
@@ -1110,6 +1113,150 @@ function welcomeHTML() {
 /* ------------------------------------------------------------------ */
 /* Vista: Oggi                                                         */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* Coach AI (Claude): commenta, non decide. La scelta della seduta resta alle regole. */
+/* La chiave sta solo in questo telefono, fuori dallo stato e dai backup. */
+/* ------------------------------------------------------------------ */
+const AIK = 'smg-ai-key';
+const AI_MODELS = { sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5' };
+const aiKey = () => { try { return localStorage.getItem(AIK) || ''; } catch (e) { return ''; } };
+const aiSetKey = k => { try { k ? localStorage.setItem(AIK, k) : localStorage.removeItem(AIK); } catch (e) {} };
+const coachSt = () => (S.coach = S.coach || { model: 'sonnet', auto: true, a: {}, m: {}, qa: [] });
+const coachOn = () => !!aiKey();
+const coachBusy = new Set();
+
+const COACH_SYS = `Sei il coach di Fabrizio dentro SMG – SudoMaGodo, la sua app personale di allenamento (bici da strada, MTB/gravel, rulli Tacx con MyWhoosh, corsa). Rispondi sempre in italiano, con tono diretto, concreto e amichevole, come un allenatore che lo conosce. Dai del tu.
+
+Come funziona SMG: ogni giorno propone una seduta con regole fisse (semaforo dal check-in con HRV, FC a riposo, sonno e sensazioni; blocchi di 4 settimane, 3 di costruzione e 1 di scarico; temi dei blocchi; sedute chiave = dure, test o l'unica media dello scarico). Tu NON scegli e NON cambi la seduta: commenti, spieghi e consigli. Se serve un cambio, indica gli strumenti dell'app: "Alternative" (stesso livello), "Decido io" (seduta libera), "Oggi salto", oppure accorciare la durata. Le sedute chiave non si saltano per mancanza di tempo (si accorcia il fondo degli altri giorni), ma si saltano col semaforo rosso o se sta male.
+
+Ripresa della corsa dopo una fascite plantare (ripresa il 20/11/2026), piano concordato: fino a metà dicembre 2 corse a settimana da 30-40 minuti facili; seconda metà di dicembre 2-3 corse, una fino a 45-50 minuti, qualche allungo breve; inizio gennaio test di corsa e poi fase completa (tempo, ripetute, salite), che decide lui con chi lo segue. Si sale di gradino solo se: i primi passi del mattino dopo non sono peggiori del solito, nessun fastidio che dura, almeno 2 settimane stabili. Se torna il fastidio: ferma una settimana al gradino o scendi. Mai due corse in giorni consecutivi; una corsa in più va al posto del fondo, non di una seduta chiave. Percorsi quasi sempre collinari: in salita conta la FC, non il passo. La FC di soglia della corsa (164) è vecchia e probabilmente troppo alta.
+
+Altre cose da sapere: è bradicardico; usa RPE da 1 a 10 in modo onesto (valori bassi = davvero facile); Garmin Fenix 8, pedali Stages sulla bici da strada. Le "sensazioni" delle attività vengono da Intervals con scala 1 = ottima, 5 = pessima; quella del check-in ha scala 1 = a pezzi, 5 = al top.
+
+Sicurezza: non fare diagnosi. Se segnala dolore che peggiora, zoppia, gonfiore o dolore a riposo, digli di fermare la corsa e sentire chi lo segue per la fascite o un medico. Con febbre o malessere diffuso: riposo.
+
+Stile: massimo 110 parole, frasi brevi, niente titoli, al massimo 3 punti elenco se servono, grassetto solo per la cosa più importante. Non ripetere i dati che ti vengono dati: interpretali. Se un dato manca o è strano, dillo in una frase.`;
+
+function coachCtx(d) {
+  const P = S.profile, L = [];
+  L.push('Oggi: ' + GG[E.parse(d).getDay()] + ' ' + d + '.');
+  L.push('Profilo: FTP ' + P.ftp + ' W, peso ' + P.weight + ' kg, FC soglia bici ' + P.lthr + ', FC soglia corsa ' + (P.lthrRun || P.lthr) + ', fase corsa: ' + (['', 'cammino e corsa', 'corsa facile', 'completa'][P.runStage || 1] || '-') + (P.sports.run ? '' : ' (corsa in pausa)') + ', ultimo test FTP ' + (P.lastTest || '-') + '.');
+  const bw = E.blockWeek(P, d), th = E.blockTheme(P, d);
+  L.push('Blocco ' + (th.name || th.short || th.id) + ': ' + (bw === 3 ? 'settimana di scarico' : 'costruzione ' + (bw + 1) + '/3') + '; prossimo scarico dal ' + E.nextDeload(P, d) + '.');
+  const rd = E.readiness(S.checkins, d); if (rd) L.push('Semaforo di oggi: ' + ({ green: 'verde', yellow: 'arancione', red: 'rosso' }[rd.light] || rd.light) + ' (punteggio ' + rd.score + '/100).');
+  L.push('Ultimi 14 giorni, un giorno per riga: data | check-in | seduta proposta da SMG | attività registrate');
+  for (let k = 14; k >= 0; k--) {
+    const x = E.addDays(d, -k), c = S.checkins[x] || {}, pl = S.plans[x], ac = (S.activities[x] || []).filter(a => a.min >= 10);
+    const ci = [c.feel ? 'come sta ' + c.feel + '/5' : '', c.hrv != null ? 'HRV ' + c.hrv : '', c.rhr != null ? 'FC riposo ' + c.rhr : '', c.sleep != null ? 'sonno ' + c.sleep : '',
+      c.pain ? 'DOLORE o acciacco segnalato' : '', c.ill ? (c.ill === 'body' ? 'febbre/malessere' : 'raffreddore/gola') : '', c.note ? 'nota: "' + c.note + '"' : ''].filter(Boolean).join(', ');
+    const pr = pl && !pl.rest && pl.tid && E.TEMPLATES[pl.tid] ? (pl.freeName || E.TEMPLATES[pl.tid].name) + ' (' + E.SPORTS[pl.sport].name + ', ' + pl.dur + '′, ' + E.LEVELS[pl.level] + (E.isKey(pl) ? ', chiave' : '') + ', ' + ({ done: 'fatta', skipped: 'saltata', planned: 'da fare' }[pl.status] || pl.status) + ')' : pl && pl.rest ? 'riposo' : '';
+    const at = ac.map(a => (E.SPORTS[a.sport] ? E.SPORTS[a.sport].name : a.sport) + ' "' + (a.name || '') + '" ' + a.min + '′, carico ' + Math.round(a.load || 0) + ', ' + (E.LEVELS[a.level] || '') + (a.rpe ? ', RPE ' + a.rpe : '') + (a.feel ? ', sensazione ' + a.feel + '/5' : '')).join(' + ');
+    if (ci || pr || at) L.push(x + ' | ' + (ci || '-') + ' | ' + (pr || '-') + ' | ' + (at || '-'));
+  }
+  return L.join('\n');
+}
+
+async function aiAsk(user, maxTok) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': aiKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model: AI_MODELS[coachSt().model] || AI_MODELS.sonnet, max_tokens: maxTok || 500, system: COACH_SYS, messages: [{ role: 'user', content: user }] })
+  });
+  if (!r.ok) { let m = ''; try { m = ((await r.json()).error || {}).message || ''; } catch (e) {} const e = new Error(m || 'HTTP ' + r.status); e.status = r.status; throw e; }
+  const j = await r.json();
+  return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+}
+function aiErr(e) {
+  const m = (e && e.message) || '';
+  if (e.status === 401 || e.status === 403) return 'Chiave AI non valida o scaduta: creane una nuova su platform.claude.com e incollala nel Profilo.';
+  if (/credit|balance|billing/i.test(m)) return 'Credito AI esaurito: ricaricalo su platform.claude.com.';
+  if (e.status === 429) return 'Troppe richieste o limite di spesa raggiunto: riprova più tardi.';
+  if (e.status === 404 || /model/i.test(m)) return 'Modello AI non disponibile: prova l\'altro modello nel Profilo.';
+  if (e.status === 529 || e.status >= 500) return 'Il servizio AI è sovraccarico in questo momento: riprova tra poco.';
+  return 'Il coach non risponde (' + (e.status || 'rete') + '). Riprova più tardi.';
+}
+// testo del coach: escape + **grassetto**, elenchi con "-" e a capo
+function coachTxt(t) {
+  return esc(t || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').split(/\n+/).map(l => /^\s*[-•]\s+/.test(l) ? '<li>' + l.replace(/^\s*[-•]\s+/, '') + '</li>' : '<p>' + l + '</p>').join('').replace(/(<li>.*?<\/li>)+/g, m => '<ul>' + m + '</ul>');
+}
+const coachDayActs = x => (S.activities[x] || []).filter(a => a.sport !== 'strength' && a.min >= 15);
+// giorno con attività da commentare: oggi o ieri, se non già commentato (la chiave include gli id, così un'attività in più rifà il commento)
+function coachActDay(d) {
+  for (const x of [d, E.addDays(d, -1)]) { const ac = coachDayActs(x); if (ac.length) return { day: x, id: x + ':' + ac.map(a => a.id).join(',') }; }
+  return null;
+}
+function coachMornKey(d) { const c = S.checkins[d] || {}; return c.snap && (c.pain || c.note) ? d + ':' + (c.pain ? 1 : 0) + ':' + (c.note || '') : null; }
+
+function coachHTML(d) {
+  if (!coachOn()) return '';
+  const C = coachSt(), parts = [];
+  const mk = coachMornKey(d);
+  if (mk) { const m = C.m[d]; parts.push('<div class="cblk"><small>Il check-in di oggi</small>' + (m && m.k === mk ? coachTxt(m.t) : m && m.err && m.k === mk ? '<p class="mut">' + esc(m.err) + ' <button class="lnk" data-cretry="m">Riprova</button></p>' : '<p class="mut">' + ico('sync', 'spin') + ' Il coach sta leggendo il check-in…</p>') + '</div>'); }
+  const ad = coachActDay(d);
+  if (ad) {
+    const a = C.a[ad.id], lab = ad.day === d ? 'Com\'è andata oggi' : 'Com\'è andata ieri';
+    if (a && a.t) parts.push('<div class="cblk"><small>' + lab + '</small>' + coachTxt(a.t) + '</div>');
+    else if (a && a.err) parts.push('<div class="cblk"><small>' + lab + '</small><p class="mut">' + esc(a.err) + ' <button class="lnk" data-cretry="a">Riprova</button></p></div>');
+    else if (C.auto !== false) parts.push('<div class="cblk"><small>' + lab + '</small><p class="mut">' + ico('sync', 'spin') + ' Il coach sta guardando l\'attività…</p></div>');
+    else parts.push('<div class="cblk"><small>' + lab + '</small><button class="btn sm" data-cretry="a">Chiedi il commento</button></div>');
+  }
+  const last = (C.qa || []).slice(-1)[0];
+  if (last && Date.now() - last.at < 3 * 86400e3) parts.push('<div class="cblk"><small>Hai chiesto: ' + esc(last.q) + '</small>' + (last.t ? coachTxt(last.t) : '<p class="mut">' + (last.err ? esc(last.err) : ico('sync', 'spin') + ' Il coach ci sta pensando…') + '</p>') + '</div>');
+  return '<div class="card coach" id="coachCard"><h3>' + ico('coach') + 'Il coach</h3>' + (parts.join('') || '<p class="mut" style="font-size:13px;margin:0 0 10px">Qui il coach commenta le tue attività e, se nel check-in segnali un dolore o scrivi una nota, ti dice come regolarti. Puoi anche fargli una domanda.</p>') +
+    '<div class="cask"><input id="cQ" placeholder="Chiedi al coach…" maxlength="300" autocomplete="off"><button class="btn hot sm" id="cGo" aria-label="Invia">' + ico('send') + '</button></div></div>';
+}
+function coachRedraw(d) { const el = document.getElementById('coachCard'); if (!el) return; const q = (document.getElementById('cQ') || {}).value || ''; el.outerHTML = coachHTML(d); const n = document.getElementById('cQ'); if (n) n.value = q; coachBind(d); }
+function coachBind(d) {
+  const go = document.getElementById('cGo'), inp = document.getElementById('cQ'); if (!go) return;
+  const send = () => {
+    const q = inp.value.trim(); if (!q) return; if (coachBusy.has('q')) return;
+    const C = coachSt(); const it = { q, at: Date.now() }; C.qa = (C.qa || []).concat(it).slice(-10); inp.value = ''; save(); coachRedraw(d);
+    coachBusy.add('q');
+    aiAsk(coachCtx(d) + '\n\nSeduta che SMG propone oggi: ' + coachToday(d) + '\n\nDomanda di Fabrizio: ' + q, 600)
+      .then(t => { it.t = t; }).catch(e => { it.err = aiErr(e); }).finally(() => { coachBusy.delete('q'); save(); coachRedraw(d); });
+  };
+  go.onclick = send; inp.onkeydown = e => { if (e.key === 'Enter') send(); };
+  document.querySelectorAll('[data-cretry]').forEach(b => b.onclick = () => { const C = coachSt(); if (b.dataset.cretry === 'm') delete C.m[d]; else { const ad = coachActDay(d); if (ad) C.a[ad.id] = { force: 1 }; } coachFill(d, true); });
+}
+function coachToday(d) {
+  const p = S.plans[d]; if (!p || p.rest || !p.tid || !E.TEMPLATES[p.tid]) return p && p.rest ? 'riposo' : 'nessuna';
+  return (p.freeName || E.TEMPLATES[p.tid].name) + ', ' + E.SPORTS[p.sport].name + ', ' + p.dur + ' minuti, ' + E.LEVELS[p.level] + (E.isKey(p) ? ', seduta chiave' : '') + (p.reasons && p.reasons.length ? '. Motivi: ' + p.reasons.join('; ') : '');
+}
+// genera ciò che manca (un compito per volta), poi ridisegna solo la card
+function coachFill(d, manual) {
+  if (!coachOn() || !document.getElementById('coachCard')) return;
+  const C = coachSt();
+  const mk = coachMornKey(d);
+  if (mk && !(C.m[d] && C.m[d].k === mk && (C.m[d].t || C.m[d].err)) && !coachBusy.has('m')) {
+    const c = S.checkins[d] || {}; coachBusy.add('m');
+    const ask = 'Check-in di stamattina: ' + (c.pain ? 'ha segnalato un dolore o acciacco. ' : '') + (c.note ? 'Nota: "' + c.note + '". ' : '') +
+      'Seduta che SMG propone oggi: ' + coachToday(d) + '.\nDimmi come regolarmi oggi (seduta e, se riguarda il piede, la corsa rispetto al piano di ripresa). Se la nota non basta per capire, fammi una domanda precisa.';
+    aiAsk(coachCtx(d) + '\n\n' + ask, 450).then(t => { C.m[d] = { k: mk, t, at: Date.now() }; }).catch(e => { C.m[d] = { k: mk, err: aiErr(e) }; })
+      .finally(() => { coachBusy.delete('m'); save(); coachRedraw(d); coachFill(d); });
+    return;
+  }
+  const ad = coachActDay(d);
+  if (ad && (C.auto !== false || manual) && !(C.a[ad.id] && (C.a[ad.id].t || C.a[ad.id].err)) && !coachBusy.has('a')) {
+    coachBusy.add('a');
+    const pl = S.plans[ad.day], acts = coachDayActs(ad.day);
+    const ask = 'Commenta le attività di ' + (ad.day === d ? 'oggi' : 'ieri') + ' (' + ad.day + '): ' +
+      acts.map(a => (E.SPORTS[a.sport] ? E.SPORTS[a.sport].name : a.sport) + ' "' + (a.name || '') + '", ' + a.min + ' minuti, carico ' + Math.round(a.load || 0) + ', livello ' + (E.LEVELS[a.level] || '-') + (a.rpe ? ', RPE ' + a.rpe : ', RPE non ancora inserito') + (a.feel ? ', sensazione ' + a.feel + '/5' : '')).join('; ') +
+      '. Seduta proposta da SMG quel giorno: ' + (pl && !pl.rest && pl.tid && E.TEMPLATES[pl.tid] ? (pl.freeName || E.TEMPLATES[pl.tid].name) + ', ' + pl.dur + ' minuti, ' + E.LEVELS[pl.level] : 'nessuna (riposo o giorno libero)') +
+      '.\nDimmi in breve: com\'è andata rispetto al previsto, una cosa da notare, e cosa conta per i prossimi giorni (seduta di domani o settimana). Se c\'è una corsa, dimmi a che punto sono del piano di ripresa.';
+    aiAsk(coachCtx(d) + '\n\n' + ask, 450).then(t => { C.a[ad.id] = { t, at: Date.now() }; }).catch(e => { C.a[ad.id] = { err: aiErr(e) }; })
+      .finally(() => {
+        coachBusy.delete('a');
+        const ks = Object.keys(C.a); if (ks.length > 40) ks.slice(0, ks.length - 40).forEach(k => delete C.a[k]);   // tiene gli ultimi 40
+        const km = Object.keys(C.m); if (km.length > 20) km.sort().slice(0, km.length - 20).forEach(k => delete C.m[k]);
+        save(); coachRedraw(d);
+      });
+  }
+}
+async function coachTest() {
+  try { const t = await aiAsk('Prova di collegamento da SMG: rispondi solo con una frase breve di saluto per Fabrizio.', 60); toast('Coach collegato: ' + t.slice(0, 80)); }
+  catch (e) { toast(aiErr(e)); }
+}
+
 function renderOggi() {
   const d = today(); const rd = E.readiness(S.checkins, d);
   const p = planFor(d);
@@ -1124,11 +1271,13 @@ function renderOggi() {
   if (!p.free && (!p.rest || p.redRest) && p.status === 'planned' && p.newLight && p.newLight !== p.keptLight) h += staleHTML(p);
   h += p.rest ? restHTML(p) : workoutHTML(p);
   h += todayActsHTML(d, p);
+  h += coachHTML(d);
   const exId = p.rest ? E.EXTRAS[E.hash(d) % E.EXTRAS.length].id : p.extra;
   if (p.status === 'skipped' && p.altExtra) h += extraHTML(p.altExtra, d);
   else if (p.status !== 'skipped' && S.profile.sports.strength && exId && (p.rest || p.level <= 2)) h += extraHTML(exId, d);
   $('#v-oggi').innerHTML = h;
   bindOggi(p);
+  coachBind(d); coachFill(d);
 }
 
 function bindOggi(p) {
@@ -1158,6 +1307,7 @@ function bindOggi(p) {
       c[k] = n == null || isNaN(n) ? null : n;
     });
     c.pain = document.getElementById('ci_pain').checked;
+    const nEl = document.getElementById('ci_note'); if (nEl) { const nv = nEl.value.trim(); if (nv) c.note = nv; else delete c.note; }
     const illSel = document.querySelector('[data-ill].on'); c.ill = illSel && illSel.dataset.ill || null;
     const r0 = E.readiness(Object.assign({}, S.checkins, { [d]: c }), d) || {};
     c.snap = { at: Date.now(), score: r0.score, light: r0.light };
@@ -1435,6 +1585,12 @@ function renderProfilo() {
     (S.icu.ok ? '<button class="btn" id="iSync">' + ico('sync', busy.sync ? 'spin' : '') + 'Aggiorna</button>' : '') + '</div>' +
     (S.icu.ok ? '<button class="btn ghost sm full" id="iOff" style="margin-top:8px">Scollega</button>' : '') + '</div>';
 
+  { const C = coachSt();
+    h += '<div class="card"><h3>' + ico('coach') + 'Coach AI</h3><div class="mut" style="font-size:13px;margin-bottom:10px">Commenta le attività, legge dolori e note del check-in (soprattutto per la ripresa della corsa) e risponde alle tue domande. Non cambia la seduta: quella resta alle regole di SMG. Quando lavora manda ad Anthropic il tuo profilo di allenamento e gli ultimi 14 giorni di check-in, sedute e attività. La chiave resta solo su questo telefono e non va nei backup.</div>' +
+      '<div class="field"><label>Chiave API Anthropic</label><input id="aiKey" type="password" value="' + esc(aiKey()) + '" placeholder="incolla qui (sk-ant-…)" autocomplete="off"></div>' +
+      '<div class="set"><div class="l"><b>Modello</b><small>Sonnet ragiona meglio; Haiku costa circa un terzo</small></div><div class="v"><select id="aiModel"><option value="sonnet"' + (C.model !== 'haiku' ? ' selected' : '') + '>Sonnet</option><option value="haiku"' + (C.model === 'haiku' ? ' selected' : '') + '>Haiku</option></select></div></div>' +
+      '<div class="set"><div class="l"><b>Commento automatico</b><small>Dopo ogni attività arrivata da Intervals</small></div>' + sw('aiAuto', C.auto !== false) + '</div>' +
+      '<div class="row" style="margin-top:6px"><button class="btn hot" id="aiSave">Salva e prova</button>' + (aiKey() ? '<button class="btn ghost" id="aiDel">Rimuovi chiave</button>' : '') + '</div></div>'; }
   h += '<div class="card"><h3>Meteo</h3><div class="set"><div class="l"><b>' + esc(S.loc ? S.loc.name : 'Nessuna località') + '</b><small>Con pioggia, freddo o buio nelle tue ore la proposta va sui rulli</small></div><button class="btn sm" id="lHere">' + ico('pin') + 'Qui</button></div>' +
     '<div class="row" style="margin-top:6px"><input id="lQ" placeholder="Cerca un comune…"><button class="btn" id="lFind" style="flex:none">Cerca</button></div><div class="results" id="lRes"></div>' + tripHTML() + '</div>';
 
@@ -1479,6 +1635,10 @@ function bindProfilo() {
     g('d_max_' + d).onchange = e => { c.max = +e.target.value; changed(); };
     g('d_at_' + d).onchange = e => { c.at = e.target.value; changed(); };
   });
+  g('aiSave').onclick = async () => { const k = g('aiKey').value.trim(); if (!k) { toast('Incolla la chiave API'); return; } aiSetKey(k); save(); toast('Provo il collegamento…'); await coachTest(); render(); };
+  if (g('aiDel')) g('aiDel').onclick = () => { aiSetKey(''); toast('Chiave AI rimossa da questo telefono'); render(); };
+  g('aiModel').onchange = e => { coachSt().model = e.target.value; save(); };
+  g('aiAuto').onchange = e => { coachSt().auto = e.target.checked; save(); };
   g('iGo').onclick = async () => { S.icu.key = g('iKey').value.trim(); S.icu.athlete = g('iAth').value.trim() || '0'; save(); if (!S.icu.key) { toast('Incolla la chiave API'); return; } await icuConnect(); render(); };
   g('iAuto').onchange = e => { S.icu.auto = e.target.checked; save(); };
   if (g('iSync')) g('iSync').onclick = () => icuSync(false);
@@ -1590,7 +1750,8 @@ const GUIDE = [
     <li><b>Corsa</b>: riattivala quando la fascite lo permette. Fasi: cammino e corsa, corsa facile, completa. Ogni fase ha le sue sedute: nella <b>corsa facile</b> fondo, fondo in crescendo, corsa nel verde (terreno morbido) e passo corto e veloce (cadenza alta, utile per il piede); nella <b>completa</b> anche andature e allunghi, progressivo, ripetute lunghe in sweet spot, salite brevi, soglia, piramide e VO2max. Tempi da concordare con chi ti segue.</li>
     <li><b>Obiettivi della corsa</b>: i percorsi sono collinari, quindi il passo non dice quanto stai spingendo. Le sedute di corsa usano la <b>FC di soglia della corsa</b>: fondo sotto un tetto di battiti, tempo, sweet spot e soglia in una fascia di battiti (con l'RPE accanto); le ripetute brevi e forti (VO2max, 30/30, salite brevi) vanno a <b>RPE</b>, perché il cuore non fa in tempo a salire, e sul Fenix arrivano senza obiettivo. Su Intervals tieni aggiornata la FC di soglia della corsa: è quella che il Fenix usa per le fasce.</li>
     <li><b>Avviare la seduta di corsa sul Fenix</b>: Start → Corsa, poi tieni premuto Menu → Allenamento → Allenamenti (o Calendario allenamenti) → la seduta SMG → <b>Esegui allenamento</b>, e solo allora Start. Prima del via in alto devi vedere il primo passo (per esempio "Corsa molto facile 8:00"); se no parte una corsa libera, senza avvisi né fine seduta. Meglio selezionarla all'aperto, subito prima di partire: se la schermata resta ferma a lungo l'orologio può tornare al quadrante e perdere la seduta.</li>
-    <li><b>Sedute chiave</b>: le sedute dure (livello Intenso e oltre), i test FTP e, nella settimana di scarico, l'unica seduta media hanno una stella gialla: in Oggi l'etichetta <b>Seduta chiave</b> e un bordo dorato, nel Diario la stella accanto al nome. Sono quelle da non saltare: se il tempo è poco si accorcia il fondo degli altri giorni. Col semaforo rosso o quando stai male si saltano comunque.</li>
+    <li><b>Coach AI</b>: con una chiave API di Anthropic (Profilo → Coach AI) in Oggi compare la card <b>Il coach</b>. Commenta da solo le attività di oggi o di ieri appena arrivano da Intervals; se nel check-in segni un dolore o scrivi una <b>nota per il coach</b> (es. "piede rigido ai primi passi"), ti dice come regolarti, tenendo conto del piano di ripresa della corsa; e risponde alle domande che scrivi in fondo alla card. Non cambia mai la seduta: per cambiarla ti indica Alternative, Decido io o Oggi salto. Ogni risposta costa una frazione di centesimo; la chiave resta solo sul telefono e non va nei backup.</li>
+    <li><b>Sedute chiave</b>: le sedute dure (livello Duro e Molto duro), i test FTP e, nella settimana di scarico, l'unica seduta media hanno una stella gialla: in Oggi l'etichetta <b>Seduta chiave</b> e un bordo dorato, nel Diario la stella accanto al nome. Sono quelle da non saltare: se il tempo è poco si accorcia il fondo degli altri giorni. Col semaforo rosso o quando stai male si saltano comunque.</li>
     <li><b>Livello delle corse</b>: per decidere quanto è stata dura una corsa SMG guarda la frequenza cardiaca rispetto alla FC di soglia della corsa, non l'intensità di Intervals, che può venire dalla potenza stimata dal polso o da soglie di corsa vecchie.</li>
     <li><b>La tua settimana</b>: giorni attivi, giorni lunghi, durata massima e ora in cui esci di solito (serve per buio e meteo).</li>
     <li><b>Forza e mobilità</b>: extra facoltativi nei giorni leggeri. Apri <b>Esercizi</b>: sotto ogni esercizio c'è una riga su come si fa. Nel riepilogo del lunedì vedi quante ne hai fatte (obiettivo: 2 a settimana).</li>
