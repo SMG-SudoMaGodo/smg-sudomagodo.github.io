@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.36';
+const APP_V = '1.37';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1156,14 +1156,25 @@ function coachCtx(d) {
   return L.join('\n');
 }
 
+// i modelli recenti possono "ragionare" prima di rispondere: per il coach il ragionamento esteso è spento
+// (risposte brevi, costo basso); se il modello non accetta di spegnerlo, si riprova lasciandogli più spazio
+let aiNoThinkOff = false;
 async function aiAsk(user, maxTok) {
+  try { return await aiCall(user, maxTok, !aiNoThinkOff); }
+  catch (e) {
+    if (e.status === 400 && /thinking/i.test(e.message) && !aiNoThinkOff) { aiNoThinkOff = true; return aiCall(user, maxTok, false); }
+    if (e.status === 'empty' && /max_tokens/.test(e.message)) return aiCall(user, (maxTok || 500) + 3000, !aiNoThinkOff);
+    throw e;
+  }
+}
+async function aiCall(user, maxTok, thinkOff) {
   // limite di 60 secondi: se la rete o il servizio si bloccano, niente rotellina infinita
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null; const tm = ac ? setTimeout(() => ac.abort(), 60000) : 0;
   let r;
   try { r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', signal: ac ? ac.signal : undefined,
     headers: { 'content-type': 'application/json', 'x-api-key': aiKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-    body: JSON.stringify({ model: AI_MODELS[coachSt().model] || AI_MODELS.sonnet, max_tokens: maxTok || 500, system: COACH_SYS, messages: [{ role: 'user', content: user }] })
+    body: JSON.stringify(Object.assign({ model: AI_MODELS[coachSt().model] || AI_MODELS.sonnet, max_tokens: Math.max(maxTok || 500, thinkOff ? 0 : 2500), system: COACH_SYS, messages: [{ role: 'user', content: user }] }, thinkOff ? { thinking: { type: 'disabled' } } : {}))
   }); } catch (e) { clearTimeout(tm); const x = new Error(e && e.name === 'AbortError' ? 'timeout' : 'rete'); x.status = e && e.name === 'AbortError' ? 'timeout' : 0; throw x; }
   clearTimeout(tm);
   if (!r.ok) { let m = ''; try { m = ((await r.json()).error || {}).message || ''; } catch (e) {} const e = new Error(m || 'HTTP ' + r.status); e.status = r.status; throw e; }
