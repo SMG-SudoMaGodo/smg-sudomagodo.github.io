@@ -4,7 +4,7 @@
 const E = window.SMG;
 const KEY = 'smg-v1';
 const ENGINE_V = 1;
-const APP_V = '1.34';
+const APP_V = '1.35';
 const ICU = 'https://intervals.icu/api/v1/athlete/';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1167,17 +1167,20 @@ async function aiAsk(user, maxTok) {
   }); } catch (e) { clearTimeout(tm); const x = new Error(e && e.name === 'AbortError' ? 'timeout' : 'rete'); x.status = e && e.name === 'AbortError' ? 'timeout' : 0; throw x; }
   clearTimeout(tm);
   if (!r.ok) { let m = ''; try { m = ((await r.json()).error || {}).message || ''; } catch (e) {} const e = new Error(m || 'HTTP ' + r.status); e.status = r.status; throw e; }
-  const j = await r.json();
+  let j; try { j = await r.json(); } catch (e) { const x = new Error('risposta interrotta (' + (e && e.message || 'json') + ')'); x.status = 'body'; throw x; }
   const t = (j.content || []).filter(c => c && c.type === 'text' && c.text).map(c => c.text).join('\n').trim();
   if (!t) { const x = new Error('vuota: ' + (j.stop_reason || '?') + ' / ' + (j.content || []).map(c => c && c.type).join(',')); x.status = 'empty'; throw x; }
   return t;
 }
 // freno ai consumi: al massimo 2 tentativi automatici per ogni commento in una sessione dell'app
 const coachTries = {};
+const COACH_SESS = Date.now();   // gli errori valgono solo per questa apertura dell'app: alla prossima si riprova
+const cErr = x => !!(x && x.err && x.sess === COACH_SESS);
 const coachCanTry = k => (coachTries[k] = (coachTries[k] || 0) + 1) <= 2;
 function aiErr(e) {
   const m = (e && e.message) || '';
-  if (e.status === 'empty') return 'Il coach ha risposto senza testo (' + esc(e.message) + '): segnalalo.';
+  if (e.status === 'empty') return 'Il coach ha risposto senza testo (' + e.message + '): segnalalo.';
+  if (e.status === 'body') return 'La risposta del coach si è interrotta per strada (' + e.message + '): riprova.';
   if (e.status === 'timeout') return 'Il coach ci ha messo più di un minuto a rispondere: riprova.';
   if (e.status === 0) return 'Non riesco a raggiungere il coach: controlla la connessione e riprova.';
   if (e.status === 401 || e.status === 403) return 'Chiave AI non valida o scaduta: creane una nuova su platform.claude.com e incollala nel Profilo.';
@@ -1185,7 +1188,7 @@ function aiErr(e) {
   if (e.status === 429) return 'Troppe richieste o limite di spesa raggiunto: riprova più tardi.';
   if (e.status === 404 || /model/i.test(m)) return 'Modello AI non disponibile: prova l\'altro modello nel Profilo.';
   if (e.status === 529 || e.status >= 500) return 'Il servizio AI è sovraccarico in questo momento: riprova tra poco.';
-  return 'Il coach non risponde (' + (e.status || 'rete') + '). Riprova più tardi.';
+  return 'Il coach non risponde (' + (e.status || '') + (e.status ? ' ' : '') + String((e && (e.name && e.name !== 'Error' ? e.name + ': ' : '') + e.message) || 'errore sconosciuto').slice(0, 140) + '). Riprova più tardi.';
 }
 // testo del coach: escape + **grassetto**, elenchi con "-" e a capo
 function coachTxt(t) {
@@ -1203,12 +1206,12 @@ function coachHTML(d) {
   if (!coachOn()) return '';
   const C = coachSt(), parts = [];
   const mk = coachMornKey(d);
-  if (mk) { const m = C.m[d]; parts.push('<div class="cblk"><small>Il check-in di oggi</small>' + (m && m.k === mk ? coachTxt(m.t) : m && m.err && m.k === mk ? '<p class="mut">' + esc(m.err) + ' <button class="lnk" data-cretry="m">Riprova</button></p>' : '<p class="mut">' + ico('sync', 'spin') + ' Il coach sta leggendo il check-in…</p>') + '</div>'); }
+  if (mk) { const m = C.m[d]; parts.push('<div class="cblk"><small>Il check-in di oggi</small>' + (m && m.k === mk && m.t ? coachTxt(m.t) : m && m.k === mk && cErr(m) ? '<p class="mut">' + esc(m.err) + ' <button class="lnk" data-cretry="m">Riprova</button></p>' : '<p class="mut">' + ico('sync', 'spin') + ' Il coach sta leggendo il check-in…</p>') + '</div>'); }
   const ad = coachActDay(d);
   if (ad) {
     const a = C.a[ad.id], lab = ad.day === d ? 'Com\'è andata oggi' : 'Com\'è andata ieri';
     if (a && a.t) parts.push('<div class="cblk"><small>' + lab + '</small>' + coachTxt(a.t) + '</div>');
-    else if (a && a.err) parts.push('<div class="cblk"><small>' + lab + '</small><p class="mut">' + esc(a.err) + ' <button class="lnk" data-cretry="a">Riprova</button></p></div>');
+    else if (cErr(a)) parts.push('<div class="cblk"><small>' + lab + '</small><p class="mut">' + esc(a.err) + ' <button class="lnk" data-cretry="a">Riprova</button></p></div>');
     else if (C.auto !== false && (coachBusy.has('a') || (coachTries['a:' + ad.id] || 0) < 2)) parts.push('<div class="cblk"><small>' + lab + '</small><p class="mut">' + ico('sync', 'spin') + ' Il coach sta guardando l\'attività…</p></div>');
     else parts.push('<div class="cblk"><small>' + lab + '</small><button class="btn sm" data-cretry="a">Chiedi il commento</button></div>');
   }
@@ -1239,23 +1242,23 @@ function coachFill(d, manual) {
   if (!coachOn() || !document.getElementById('coachCard')) return;
   const C = coachSt();
   const mk = coachMornKey(d);
-  if (mk && !(C.m[d] && C.m[d].k === mk && (C.m[d].t || C.m[d].err)) && !coachBusy.has('m') && (manual || coachCanTry('m:' + mk))) {
+  if (mk && !(C.m[d] && C.m[d].k === mk && (C.m[d].t || cErr(C.m[d]))) && !coachBusy.has('m') && (manual || coachCanTry('m:' + mk))) {
     const c = S.checkins[d] || {}; coachBusy.add('m');
     const ask = 'Check-in di stamattina: ' + (c.pain ? 'ha segnalato un dolore o acciacco. ' : '') + (c.note ? 'Nota: "' + c.note + '". ' : '') +
       'Seduta che SMG propone oggi: ' + coachToday(d) + '.\nDimmi come regolarmi oggi (seduta e, se riguarda il piede, la corsa rispetto al piano di ripresa). Se la nota non basta per capire, fammi una domanda precisa.';
-    aiAsk(coachCtx(d) + '\n\n' + ask, 450).then(t => { C.m[d] = { k: mk, t, at: Date.now() }; }).catch(e => { C.m[d] = { k: mk, err: aiErr(e) }; })
+    aiAsk(coachCtx(d) + '\n\n' + ask, 450).then(t => { C.m[d] = { k: mk, t, at: Date.now() }; }).catch(e => { C.m[d] = { k: mk, err: aiErr(e), sess: COACH_SESS }; })
       .finally(() => { coachBusy.delete('m'); save(); coachRedraw(d); coachFill(d); });
     return;
   }
   const ad = coachActDay(d);
-  if (ad && (C.auto !== false || manual) && !(C.a[ad.id] && (C.a[ad.id].t || C.a[ad.id].err)) && !coachBusy.has('a') && (manual || coachCanTry('a:' + ad.id))) {
+  if (ad && (C.auto !== false || manual) && !(C.a[ad.id] && (C.a[ad.id].t || cErr(C.a[ad.id]))) && !coachBusy.has('a') && (manual || coachCanTry('a:' + ad.id))) {
     coachBusy.add('a');
     const pl = S.plans[ad.day], acts = coachDayActs(ad.day);
     const ask = 'Commenta le attività di ' + (ad.day === d ? 'oggi' : 'ieri') + ' (' + ad.day + '): ' +
       acts.map(a => (E.SPORTS[a.sport] ? E.SPORTS[a.sport].name : a.sport) + ' "' + (a.name || '') + '", ' + a.min + ' minuti, carico ' + Math.round(a.load || 0) + ', livello ' + (E.LEVELS[a.level] || '-') + (a.rpe ? ', RPE ' + a.rpe : ', RPE non ancora inserito') + (a.feel ? ', sensazione ' + a.feel + '/5' : '')).join('; ') +
       '. Seduta proposta da SMG quel giorno: ' + (pl && !pl.rest && pl.tid && E.TEMPLATES[pl.tid] ? (pl.freeName || E.TEMPLATES[pl.tid].name) + ', ' + pl.dur + ' minuti, ' + E.LEVELS[pl.level] : 'nessuna (riposo o giorno libero)') +
       '.\nDimmi in breve: com\'è andata rispetto al previsto, una cosa da notare, e cosa conta per i prossimi giorni (seduta di domani o settimana). Se c\'è una corsa, dimmi a che punto sono del piano di ripresa.';
-    aiAsk(coachCtx(d) + '\n\n' + ask, 450).then(t => { C.a[ad.id] = { t, at: Date.now() }; }).catch(e => { C.a[ad.id] = { err: aiErr(e) }; })
+    aiAsk(coachCtx(d) + '\n\n' + ask, 450).then(t => { C.a[ad.id] = { t, at: Date.now() }; }).catch(e => { C.a[ad.id] = { err: aiErr(e), sess: COACH_SESS }; })
       .finally(() => {
         coachBusy.delete('a');
         const ks = Object.keys(C.a); if (ks.length > 40) ks.slice(0, ks.length - 40).forEach(k => delete C.a[k]);   // tiene gli ultimi 40
